@@ -4,14 +4,23 @@ import { JwtService } from '@nestjs/jwt';
 import { SignUpDto, SignInDto } from './interfaces/interfaces_auth.interface';
 import * as bcrypt from 'bcrypt';
 import { EmailService } from '../email/email.service';
+import { OAuth2Client } from 'google-auth-library'; // Додай імпорт
 
 @Injectable()
 export class AuthService {
+    private oAuth2Client: OAuth2Client; // Додай поле для OAuth2Client
+
     constructor(
         private readonly prisma: PrismaService,
         private readonly jwtService: JwtService,
         private readonly emailService: EmailService,
-    ) {}
+    ) {
+        // Ініціалізуй OAuth2Client у конструкторі
+        const clientId = process.env.GOOGLE_CLIENT_ID;
+        const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+        const redirectUri = 'https://sharing-67g1.onrender.com/auth/callback';
+        this.oAuth2Client = new OAuth2Client(clientId, clientSecret, redirectUri);
+    }
 
     // Зберігаємо коди верифікації для зміни пароля
     private passwordChangeCodes: Map<string, { code: string; expiresAt: number }> = new Map();
@@ -190,5 +199,16 @@ export class AuthService {
 
         console.log(`Verification code for ${email} verified successfully`);
         return { success: true, message: 'Verification code verified' };
+    }
+
+    // Новий метод для обміну коду на токени
+    async exchangeCodeForTokens(code: string) {
+        try {
+            const { tokens } = await this.oAuth2Client.getToken(code);
+            return tokens;
+        } catch (error) {
+            console.error('Error exchanging code for tokens:', error);
+            throw new BadRequestException('Failed to exchange authorization code for tokens');
+        }
     }
 }

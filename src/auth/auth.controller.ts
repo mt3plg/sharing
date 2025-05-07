@@ -6,6 +6,8 @@ import {
     HttpStatus,
     Get,
     UseGuards,
+    Query, // Додай імпорт Query
+    BadRequestException, // Додай імпорт для BadRequestException
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SignUpDto, SignInDto, VerifyDto } from './interfaces/interfaces_auth.interface';
@@ -71,5 +73,21 @@ export class AuthController {
     @ApiResponse({ status: 400, description: 'Невірний код верифікації' })
     async verifyPasswordChangeCode(@Body('email') email: string, @Body('code') code: string) {
         return this.authService.verifyPasswordChangeCode(email, code);
+    }
+
+    // Новий маршрут для обробки OAuth callback
+    @Get('callback')
+    @ApiOperation({ summary: 'Обробка OAuth callback від Google' })
+    @ApiResponse({ status: 200, description: 'Токени отримані успішно' })
+    @ApiResponse({ status: 400, description: 'Помилка авторизації' })
+    async handleOAuthCallback(@Query('code') code: string) {
+        if (!code) {
+            throw new BadRequestException('Authorization code not provided');
+        }
+        const tokens = await this.authService.exchangeCodeForTokens(code);
+        return {
+            message: 'Authorization successful',
+            refresh_token: tokens.refresh_token,
+        };
     }
 }
