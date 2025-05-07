@@ -1,0 +1,111 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String           @id @default(uuid())
+  name              String
+  email             String           @unique
+  phone             String           @unique
+  password          String
+  status            String           @default("pending")
+  verificationToken String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  locationName      String?
+  latitude          Float?
+  longitude         Float?
+  rating            Float?           @default(0.0)
+  driverTrips       Int?             @default(0)
+  passengerTrips    Int?             @default(0)
+  avatar            String?
+  driverRides       Ride[]           @relation("DriverRides")
+  passengerRides    Ride[]           @relation("PassengerRides")
+  conversations     Conversation[]   @relation("UserConversations")
+  messages          Message[]        @relation("UserMessages") // Зворотний зв’язок для Message
+  reviewsReceived   Review[]         @relation("UserReviews")
+  reviewsGiven      Review[]         @relation("AuthorReviews")
+  friendsInitiated  Friend[]         @relation("UserFriends")
+  friendsReceived   Friend[]         @relation("FriendFriends")
+  bookingRequests   BookingRequest[] @relation("UserBookingRequests")
+}
+
+model Ride {
+  id              String           @id @default(uuid())
+  driverId        String
+  driver          User             @relation("DriverRides", fields: [driverId], references: [id])
+  passengerId     String?
+  passenger       User?            @relation("PassengerRides", fields: [passengerId], references: [id])
+  startLocation   String
+  startCoordsLat  Float?
+  startCoordsLng  Float?
+  endLocation     String
+  endCoordsLat    Float?
+  endCoordsLng    Float?
+  departureTime   DateTime
+  availableSeats  Int
+  vehicleType     String?
+  status          String           @default("active")
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  conversations   Conversation[]   @relation("RideConversations")
+  bookingRequests BookingRequest[] @relation("RideBookingRequests")
+}
+
+model Conversation {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation("UserConversations", fields: [userId], references: [id])
+  rideId    String
+  ride      Ride      @relation("RideConversations", fields: [rideId], references: [id])
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  messages  Message[] @relation("ConversationMessages") // Зворотний зв’язок для Message
+}
+
+model Message {
+  id             String       @id @default(uuid())
+  conversationId String
+  conversation   Conversation @relation("ConversationMessages", fields: [conversationId], references: [id]) // Зворотний зв’язок для Conversation
+  senderId       String
+  sender         User         @relation("UserMessages", fields: [senderId], references: [id]) // Зворотний зв’язок для User
+  content        String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  read           Boolean      @default(false)
+}
+
+model Review {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation("UserReviews", fields: [userId], references: [id])
+  authorId  String
+  author    User     @relation("AuthorReviews", fields: [authorId], references: [id])
+  rating    Float
+  comment   String
+  createdAt DateTime @default(now())
+}
+
+model Friend {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation("UserFriends", fields: [userId], references: [id])
+  friendId  String
+  friend    User     @relation("FriendFriends", fields: [friendId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model BookingRequest {
+  id          String   @id @default(uuid())
+  rideId      String
+  ride        Ride     @relation("RideBookingRequests", fields: [rideId], references: [id])
+  passengerId String
+  passenger   User     @relation("UserBookingRequests", fields: [passengerId], references: [id])
+  status      String   @default("pending")
+  createdAt   DateTime @default(now())
+}

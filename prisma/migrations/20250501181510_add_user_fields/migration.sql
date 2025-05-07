@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN     "avatar" TEXT,
+ADD COLUMN     "driverTrips" INTEGER DEFAULT 0,
+ADD COLUMN     "passengerTrips" INTEGER DEFAULT 0,
+ADD COLUMN     "rating" DOUBLE PRECISION DEFAULT 0.0;
