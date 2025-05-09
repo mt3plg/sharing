@@ -650,8 +650,9 @@ export class UsersService {
         return { success: true };
     }
 
-    async searchUsers(query: string, currentUserId: string) {
-        console.log(`Searching users with query: ${query}, currentUserId: ${currentUserId}`);
+    async searchUsers(query: string, currentUserId: string, category?: string, limit: number = 10, offset: number = 0) {
+        console.log(`Searching users with query: ${query}, currentUserId: ${currentUserId}, category: ${category}, limit: ${limit}, offset: ${offset}`);
+        
         const currentUser = await this.findOne(currentUserId);
         if (!currentUser) {
             throw new NotFoundException('Current user not found');
@@ -659,7 +660,7 @@ export class UsersService {
 
         if (!query || query.trim() === '') {
             console.log('Query is empty, returning empty list');
-            return { success: true, users: [] };
+            return { success: true, users: [], total: 0 };
         }
 
         const users = await this.prisma.user.findMany({
@@ -677,63 +678,83 @@ export class UsersService {
                 avatar: true,
                 rating: true,
             },
+            take: limit,
+            skip: offset,
         });
 
-        const usersWithDetails = await Promise.all(users.map(async (user) => {
-            const sharedRideAsDriver = await this.prisma.ride.findFirst({
-                where: {
-                    driverId: user.id,
-                    passengerId: currentUserId,
-                },
-            });
+        const total = await this.prisma.user.count({
+            where: {
+                OR: [
+                    { name: { contains: query, mode: 'insensitive' } },
+                    { email: { contains: query, mode: 'insensitive' } },
+                ],
+                id: { not: currentUserId },
+            },
+        });
 
-            const sharedRideAsPassenger = await this.prisma.ride.findFirst({
-                where: {
-                    driverId: currentUserId,
-                    passengerId: user.id,
-                },
-            });
+        const usersWithDetails = await Promise.all(
+            users.map(async (user) => {
+                const sharedRideAsDriver = await this.prisma.ride.findFirst({
+                    where: {
+                        driverId: user.id,
+                        passengerId: currentUserId,
+                    },
+                });
 
-            const areFriends = await this.prisma.friend.findFirst({
-                where: {
-                    OR: [
-                        { userId: currentUserId, friendId: user.id },
-                        { userId: user.id, friendId: currentUserId },
-                    ],
-                },
-            });
+                const sharedRideAsPassenger = await this.prisma.ride.findFirst({
+                    where: {
+                        driverId: currentUserId,
+                        passengerId: user.id,
+                    },
+                });
 
-            const conversation = await this.prisma.conversation.findFirst({
-                where: {
-                    OR: [
-                        { userId: user.id, ride: { driverId: currentUserId } },
-                        { userId: currentUserId, ride: { driverId: user.id } },
-                    ],
-                },
-            });
+                const areFriends = await this.prisma.friend.findFirst({
+                    where: {
+                        OR: [
+                            { userId: currentUserId, friendId: user.id },
+                            { userId: user.id, friendId: currentUserId },
+                        ],
+                    },
+                });
 
-            let category = 'Others';
-            if (areFriends) {
-                category = 'Friends';
-            } else if (sharedRideAsDriver) {
-                category = 'Drivers';
-            } else if (sharedRideAsPassenger) {
-                category = 'Passengers';
-            }
+                const conversation = await this.prisma.conversation.findFirst({
+                    where: {
+                        OR: [
+                            { userId: user.id, ride: { driverId: currentUserId } },
+                            { userId: currentUserId, ride: { driverId: user.id } },
+                        ],
+                    },
+                });
 
-            return {
-                id: user.id,
-                name: user.name,
-                email: user.email,
-                avatar: user.avatar,
-                rating: user.rating || 0,
-                category,
-                conversationId: conversation?.id || null,
-                rideId: sharedRideAsDriver?.id || sharedRideAsPassenger?.id || null,
-            };
-        }));
+                let userCategory = 'Others';
+                if (areFriends) {
+                    userCategory = 'Friends';
+                } else if (sharedRideAsDriver) {
+                    userCategory = 'Drivers';
+                } else if (sharedRideAsPassenger) {
+                    userCategory = 'Passengers';
+                }
 
-        console.log('Search results:', usersWithDetails);
-        return { success: true, users: usersWithDetails };
+                if (category && userCategory !== category && userCategory !== 'Others') {
+                    return null;
+                }
+
+                return {
+                    id: user.id,
+                    name: user.name,
+                    email: user.email,
+                    avatar: user.avatar,
+                    rating: user.rating || 0,
+                    category: userCategory,
+                    conversationId: conversation?.id || null,
+                    rideId: sharedRideAsDriver?.id || sharedRideAsPassenger?.id || null,
+                };
+            }),
+        );
+
+        const filteredUsers = usersWithDetails.filter(user => user !== null);
+
+        console.log('Search results:', filteredUsers);
+        return { success: true, users: filteredUsers, total };
     }
 }

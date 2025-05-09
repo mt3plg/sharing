@@ -1,3 +1,4 @@
+// prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
@@ -27,12 +28,15 @@ model User {
   driverRides       Ride[]           @relation("DriverRides")
   passengerRides    Ride[]           @relation("PassengerRides")
   conversations     Conversation[]   @relation("UserConversations")
-  messages          Message[]        @relation("UserMessages") // Зворотний зв’язок для Message
+  messages          Message[]        @relation("UserMessages")
   reviewsReceived   Review[]         @relation("UserReviews")
   reviewsGiven      Review[]         @relation("AuthorReviews")
   friendsInitiated  Friend[]         @relation("UserFriends")
   friendsReceived   Friend[]         @relation("FriendFriends")
   bookingRequests   BookingRequest[] @relation("UserBookingRequests")
+
+  @@index([name])
+  @@index([email])
 }
 
 model Ride {
@@ -65,15 +69,15 @@ model Conversation {
   ride      Ride      @relation("RideConversations", fields: [rideId], references: [id])
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
-  messages  Message[] @relation("ConversationMessages") // Зворотний зв’язок для Message
+  messages  Message[] @relation("ConversationMessages")
 }
 
 model Message {
   id             String       @id @default(uuid())
   conversationId String
-  conversation   Conversation @relation("ConversationMessages", fields: [conversationId], references: [id]) // Зворотний зв’язок для Conversation
+  conversation   Conversation @relation("ConversationMessages", fields: [conversationId], references: [id])
   senderId       String
-  sender         User         @relation("UserMessages", fields: [senderId], references: [id]) // Зворотний зв’язок для User
+  sender         User         @relation("UserMessages", fields: [senderId], references: [id])
   content        String
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt

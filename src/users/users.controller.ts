@@ -14,12 +14,14 @@ import {
     NotFoundException,
     HttpCode,
     HttpStatus,
+    Query,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import { UpdateLocationDto } from '../dto/update-location.dto';
 import { CreateReviewDto } from '../dto/create-review.dto';
+import { SearchUsersQueryDto } from './interfaces/search-users-query.dto';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -229,5 +231,24 @@ export class UsersController {
         @AuthUser() user: any,
     ) {
         return this.usersService.rejectBookingRequest(bookingRequestId, user.id);
+    }
+
+    @Get('search')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Search users by name or email with pagination and category filter' })
+    @ApiResponse({ status: 200, description: 'Returns a list of users.' })
+    @ApiResponse({ status: 401, description: 'Unauthorized.' })
+    async searchUsers(
+        @Query() queryDto: SearchUsersQueryDto,
+        @AuthUser() user: any,
+    ) {
+        return this.usersService.searchUsers(
+            queryDto.query,
+            user.id,
+            queryDto.category,
+            queryDto.limit,
+            queryDto.offset,
+        );
     }
 }
