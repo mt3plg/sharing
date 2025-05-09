@@ -29,7 +29,7 @@ export class UsersService {
         });
     }
 
-    async findOne(id: string): Promise<UserEntity> {
+    async findOne(id: string): Promise<UserEntity | null> {
         console.log('Finding user with ID:', id);
         const user = await this.prisma.user.findUnique({
             where: { id },
@@ -52,9 +52,15 @@ export class UsersService {
             },
         });
         if (!user) {
-            throw new NotFoundException(`Користувача з ID ${id} не знайдено`);
+            console.log(`User with ID ${id} not found`);
+            return null;
         }
+        console.log('Found user:', user);
         return user;
+    }
+
+    async findMany(query: any): Promise<any> {
+        return this.prisma.user.findMany(query);
     }
 
     async findByEmail(email: string): Promise<UserEntity | null> {
@@ -83,6 +89,9 @@ export class UsersService {
 
     async update(id: string, updateUserDto: UpdateUserDto): Promise<UserEntity> {
         const user = await this.findOne(id);
+        if (!user) {
+            throw new NotFoundException(`Користувача з ID ${id} не знайдено`);
+        }
         const updateData: any = { ...updateUserDto };
         if (updateUserDto.password) {
             updateData.password = await bcrypt.hash(updateUserDto.password, 10);
@@ -95,6 +104,9 @@ export class UsersService {
 
     async changePassword(id: string, email: string, currentPassword: string, newPassword: string, verificationCode: string): Promise<UserEntity> {
         const user = await this.findOne(id);
+        if (!user) {
+            throw new NotFoundException(`Користувача з ID ${id} не знайдено`);
+        }
 
         if (!user.password) {
             throw new BadRequestException('Пароль користувача не знайдено');
@@ -115,6 +127,10 @@ export class UsersService {
     }
 
     async updateLocation(id: string, updateLocationDto: UpdateLocationDto): Promise<UserEntity> {
+        const user = await this.findOne(id);
+        if (!user) {
+            throw new NotFoundException(`Користувача з ID ${id} не знайдено`);
+        }
         return this.prisma.user.update({
             where: { id },
             data: {
@@ -127,6 +143,9 @@ export class UsersService {
 
     async updateAvatar(id: string, avatarPath: string): Promise<UserEntity> {
         const user = await this.findOne(id);
+        if (!user) {
+            throw new NotFoundException(`Користувача з ID ${id} не знайдено`);
+        }
 
         if (user.avatar && typeof user.avatar === 'string' && user.avatar !== 'undefined') {
             try {
@@ -147,6 +166,9 @@ export class UsersService {
 
     async remove(id: string): Promise<void> {
         const user = await this.findOne(id);
+        if (!user) {
+            throw new NotFoundException(`Користувача з ID ${id} не знайдено`);
+        }
         if (user.avatar && typeof user.avatar === 'string' && user.avatar !== 'undefined') {
             try {
                 const filePath = join(process.cwd(), user.avatar);
@@ -626,5 +648,92 @@ export class UsersService {
         });
 
         return { success: true };
+    }
+
+    async searchUsers(query: string, currentUserId: string) {
+        console.log(`Searching users with query: ${query}, currentUserId: ${currentUserId}`);
+        const currentUser = await this.findOne(currentUserId);
+        if (!currentUser) {
+            throw new NotFoundException('Current user not found');
+        }
+
+        if (!query || query.trim() === '') {
+            console.log('Query is empty, returning empty list');
+            return { success: true, users: [] };
+        }
+
+        const users = await this.prisma.user.findMany({
+            where: {
+                OR: [
+                    { name: { contains: query, mode: 'insensitive' } },
+                    { email: { contains: query, mode: 'insensitive' } },
+                ],
+                id: { not: currentUserId },
+            },
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                avatar: true,
+                rating: true,
+            },
+        });
+
+        const usersWithDetails = await Promise.all(users.map(async (user) => {
+            const sharedRideAsDriver = await this.prisma.ride.findFirst({
+                where: {
+                    driverId: user.id,
+                    passengerId: currentUserId,
+                },
+            });
+
+            const sharedRideAsPassenger = await this.prisma.ride.findFirst({
+                where: {
+                    driverId: currentUserId,
+                    passengerId: user.id,
+                },
+            });
+
+            const areFriends = await this.prisma.friend.findFirst({
+                where: {
+                    OR: [
+                        { userId: currentUserId, friendId: user.id },
+                        { userId: user.id, friendId: currentUserId },
+                    ],
+                },
+            });
+
+            const conversation = await this.prisma.conversation.findFirst({
+                where: {
+                    OR: [
+                        { userId: user.id, ride: { driverId: currentUserId } },
+                        { userId: currentUserId, ride: { driverId: user.id } },
+                    ],
+                },
+            });
+
+            let category = 'Others';
+            if (areFriends) {
+                category = 'Friends';
+            } else if (sharedRideAsDriver) {
+                category = 'Drivers';
+            } else if (sharedRideAsPassenger) {
+                category = 'Passengers';
+            }
+
+            return {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                avatar: user.avatar,
+                rating: user.rating || 0,
+                category,
+                conversationId: conversation?.id || null,
+                rideId: sharedRideAsDriver?.id || sharedRideAsPassenger?.id || null,
+            };
+        }));
+
+        console.log('Search results:', usersWithDetails);
+        return { success: true, users: usersWithDetails };
     }
 }
