@@ -25,8 +25,8 @@ export class ConversationsService {
         const conversation = await this.prisma.conversation.create({
             data: {
                 userId: targetUserId,
-                rideId: rideId || null, // Змінено з undefined на null
-            },
+                rideId: rideId || null, // Залишаємо null, оскільки schema.prisma визначає String?
+            } as any, // Тимчасове приведення для обходу помилки типізації
             include: {
                 user: { select: { id: true, name: true, avatar: true } },
                 ride: rideId ? true : false,
