@@ -25,7 +25,7 @@ export class ConversationsService {
         const conversation = await this.prisma.conversation.create({
             data: {
                 userId: targetUserId,
-                rideId: rideId || undefined, // Змінено з null на undefined
+                rideId: rideId || null, // Змінено з undefined на null
             },
             include: {
                 user: { select: { id: true, name: true, avatar: true } },
