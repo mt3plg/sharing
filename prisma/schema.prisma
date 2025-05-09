@@ -65,8 +65,8 @@ model Conversation {
   id        String    @id @default(uuid())
   userId    String
   user      User      @relation("UserConversations", fields: [userId], references: [id])
-  rideId    String
-  ride      Ride      @relation("RideConversations", fields: [rideId], references: [id])
+  rideId    String? // Зроблено необов’язковим
+  ride      Ride?     @relation("RideConversations", fields: [rideId], references: [id])
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   messages  Message[] @relation("ConversationMessages")

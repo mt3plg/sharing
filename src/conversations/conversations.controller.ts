@@ -1,3 +1,4 @@
+// src/conversations/conversations.controller.ts
 import {
     Controller,
     Post,
@@ -13,10 +14,13 @@ import { CreateConversationDto, CreateMessageDto } from './interfaces/interfaces
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser } from '../common/decorators/common_decorators_user.decorator';
+import { Logger } from '@nestjs/common';
 
 @ApiTags('conversations')
 @Controller('conversations')
 export class ConversationsController {
+    private readonly logger = new Logger(ConversationsController.name);
+
     constructor(private readonly conversationsService: ConversationsService) {}
 
     @Post()
@@ -31,6 +35,7 @@ export class ConversationsController {
         @Body() createConversationDto: CreateConversationDto,
         @AuthUser() user: any,
     ) {
+        this.logger.log(`Creating conversation for user ${user.id}: ${JSON.stringify(createConversationDto)}`);
         return this.conversationsService.create(createConversationDto, user.id);
     }
 
@@ -48,6 +53,7 @@ export class ConversationsController {
         @Body() createMessageDto: CreateMessageDto,
         @AuthUser() user: any,
     ) {
+        this.logger.log(`Sending message to conversation ${conversationId} by user ${user.id}: ${JSON.stringify(createMessageDto)}`);
         return this.conversationsService.sendMessage(
             conversationId,
             createMessageDto,
@@ -64,6 +70,7 @@ export class ConversationsController {
     @ApiResponse({ status: 403, description: 'Forbidden' })
     @ApiResponse({ status: 404, description: 'Conversation not found' })
     async getMessages(@Param('id') conversationId: string, @AuthUser() user: any) {
+        this.logger.log(`Fetching messages for conversation ${conversationId} by user ${user.id}`);
         return this.conversationsService.getMessages(conversationId, user.id);
     }
 
@@ -74,6 +81,7 @@ export class ConversationsController {
     @ApiResponse({ status: 200, description: 'Conversations retrieved successfully' })
     @ApiResponse({ status: 401, description: 'Unauthorized' })
     async getConversations(@AuthUser() user: any) {
+        this.logger.log(`Fetching conversations for user ${user.id}`);
         return this.conversationsService.getConversations(user.id);
     }
 }

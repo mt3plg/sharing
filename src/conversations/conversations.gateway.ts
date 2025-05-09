@@ -1,3 +1,4 @@
+// src/conversations/conversations.gateway.ts
 import {
     WebSocketGateway,
     SubscribeMessage,
@@ -17,7 +18,12 @@ interface ExtendedSocket extends Socket {
     request: Socket['request'] & { user?: { id: string; email: string; role: string } };
 }
 
-@WebSocketGateway({ cors: { origin: process.env.NGROK_URL || 'NGROK_URL', credentials: true } })
+@WebSocketGateway({
+    cors: {
+        origin: ['http://localhost:3000', process.env.NGROK_URL, 'https://your-frontend-domain.com'],
+        credentials: true,
+    },
+})
 export class ConversationsGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
     @WebSocketServer()
     server!: Server;
@@ -31,7 +37,11 @@ export class ConversationsGateway implements OnGatewayInit, OnGatewayConnection,
     }
 
     handleConnection(client: ExtendedSocket) {
-        this.logger.log(`Client connected: ${client.id}`);
+        this.logger.log(`Client connected: ${client.id}, auth: ${JSON.stringify(client.request.user)}`);
+        if (!client.request.user) {
+            this.logger.error('No user data in socket connection');
+            client.disconnect();
+        }
     }
 
     handleDisconnect(client: ExtendedSocket) {
@@ -50,7 +60,7 @@ export class ConversationsGateway implements OnGatewayInit, OnGatewayConnection,
                 throw new Error('User not authenticated');
             }
 
-            this.logger.log(`Received sendMessage from user ${user.id}:`, data);
+            this.logger.log(`Received sendMessage from user ${user.id}: ${JSON.stringify(data)}`);
 
             const createMessageDto: CreateMessageDto = { content: data.message.text };
             const messageResponse = await this.conversationsService.sendMessage(
@@ -60,7 +70,7 @@ export class ConversationsGateway implements OnGatewayInit, OnGatewayConnection,
             );
 
             if (messageResponse.success) {
-                this.logger.log(`Emitting newMessage to conversation ${data.conversationId}:`, messageResponse.message);
+                this.logger.log(`Emitting newMessage to conversation ${data.conversationId}: ${JSON.stringify(messageResponse.message)}`);
                 this.server.to(data.conversationId).emit('newMessage', messageResponse.message);
                 return messageResponse;
             } else {

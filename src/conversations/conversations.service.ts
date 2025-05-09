@@ -1,33 +1,39 @@
+// src/conversations/conversations.service.ts
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CreateConversationDto, CreateMessageDto } from './interfaces/interfaces_conversation.interface';
+import { Logger } from '@nestjs/common';
 
 @Injectable()
 export class ConversationsService {
+    private readonly logger = new Logger(ConversationsService.name);
+
     constructor(private readonly prisma: PrismaService) {}
 
     async create(createConversationDto: CreateConversationDto, userId: string) {
-        const { rideId } = createConversationDto;
+        const { rideId, userId: targetUserId } = createConversationDto;
 
-        console.log(`Creating conversation for userId: ${userId}, rideId: ${rideId}`);
-        const ride = await this.prisma.ride.findUnique({ where: { id: rideId } });
-        if (!ride) {
-            console.error('Ride not found:', rideId);
-            throw new NotFoundException('Ride not found');
+        this.logger.log(`Creating conversation for userId: ${userId}, targetUserId: ${targetUserId}, rideId: ${rideId}`);
+        if (rideId) {
+            const ride = await this.prisma.ride.findUnique({ where: { id: rideId } });
+            if (!ride) {
+                this.logger.error('Ride not found:', rideId);
+                throw new NotFoundException('Ride not found');
+            }
         }
 
         const conversation = await this.prisma.conversation.create({
             data: {
-                userId,
-                rideId,
+                userId: targetUserId,
+                rideId: rideId || null,
             },
             include: {
                 user: { select: { id: true, name: true, avatar: true } },
-                ride: true,
+                ride: rideId ? true : false,
             },
         });
 
-        console.log('Conversation created:', conversation);
+        this.logger.log('Conversation created:', conversation);
         return { success: true, conversationId: conversation.id };
     }
 
@@ -36,24 +42,24 @@ export class ConversationsService {
         createMessageDto: CreateMessageDto,
         senderId: string,
     ) {
-        console.log(`Sending message to conversationId: ${conversationId}, senderId: ${senderId}`);
+        this.logger.log(`Sending message to conversationId: ${conversationId}, senderId: ${senderId}, content: ${createMessageDto.content}`);
         const conversation = await this.prisma.conversation.findUnique({
             where: { id: conversationId },
             include: { ride: true },
         });
 
         if (!conversation) {
-            console.error('Conversation not found:', conversationId);
+            this.logger.error('Conversation not found:', conversationId);
             throw new NotFoundException('Conversation not found');
         }
 
-        console.log('Conversation found:', conversation);
+        this.logger.log('Conversation found:', conversation);
         if (conversation.userId !== senderId && conversation.rideId) {
             const ride = await this.prisma.ride.findUnique({
                 where: { id: conversation.rideId },
             });
             if (ride?.driverId !== senderId) {
-                console.error(`User ${senderId} not authorized to send message in conversation ${conversationId}`);
+                this.logger.error(`User ${senderId} not authorized to send message in conversation ${conversationId}`);
                 throw new ForbiddenException('Not authorized to send message');
             }
         }
@@ -69,19 +75,19 @@ export class ConversationsService {
             },
         });
 
-        console.log('Message sent:', message);
+        this.logger.log('Message sent:', message);
         return { success: true, message };
     }
 
     async getMessages(conversationId: string, userId: string) {
-        console.log(`Fetching messages for conversationId: ${conversationId}, userId: ${userId}`);
+        this.logger.log(`Fetching messages for conversationId: ${conversationId}, userId: ${userId}`);
         const conversation = await this.prisma.conversation.findUnique({
             where: { id: conversationId },
             include: { ride: true },
         });
 
         if (!conversation) {
-            console.error('Conversation not found:', conversationId);
+            this.logger.error('Conversation not found:', conversationId);
             throw new NotFoundException('Conversation not found');
         }
 
@@ -90,7 +96,7 @@ export class ConversationsService {
                 where: { id: conversation.rideId },
             });
             if (ride?.driverId !== userId) {
-                console.error(`User ${userId} not authorized to view messages in conversation ${conversationId}`);
+                this.logger.error(`User ${userId} not authorized to view messages in conversation ${conversationId}`);
                 throw new ForbiddenException('Not authorized to view messages');
             }
         }
@@ -110,12 +116,12 @@ export class ConversationsService {
             data: { read: true },
         });
 
-        console.log('Messages fetched:', messages);
+        this.logger.log('Messages fetched:', messages);
         return { success: true, messages };
     }
 
     async getConversations(userId: string) {
-        console.log(`Fetching conversations for userId: ${userId}`);
+        this.logger.log(`Fetching conversations for userId: ${userId}`);
         const conversations = await this.prisma.conversation.findMany({
             where: {
                 OR: [
@@ -137,11 +143,11 @@ export class ConversationsService {
                 },
             },
         });
-        console.log('Conversations from DB:', conversations);
+        this.logger.log('Conversations from DB:', conversations);
 
         const formattedConversations = await Promise.all(
             conversations.map(async (conversation) => {
-                const isUserTheDriver = conversation.ride.driverId === userId;
+                const isUserTheDriver = conversation.ride?.driverId === userId;
                 let contact;
                 let category;
 
@@ -156,13 +162,13 @@ export class ConversationsService {
 
                 if (areFriends) {
                     category = 'Friends';
-                    contact = conversation.userId === userId ? conversation.ride.driver : conversation.user;
+                    contact = conversation.userId === userId && conversation.ride ? conversation.ride.driver : conversation.user;
                 } else if (isUserTheDriver) {
                     category = 'Passengers';
                     contact = conversation.user;
                 } else {
                     category = 'Drivers';
-                    contact = conversation.ride.driver;
+                    contact = conversation.ride?.driver;
                 }
 
                 const unreadMessages = await this.prisma.message.count({
@@ -192,7 +198,7 @@ export class ConversationsService {
             }),
         );
 
-        console.log('Formatted conversations:', formattedConversations);
+        this.logger.log('Formatted conversations:', formattedConversations);
         return { success: true, conversations: formattedConversations };
     }
 }

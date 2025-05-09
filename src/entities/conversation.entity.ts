@@ -1,7 +1,8 @@
+// src/entities/conversation.entity.ts
 import { ApiProperty } from '@nestjs/swagger';
-import { UserEntity } from './user.entity'; // Додаємо імпорт
-import { RideEntity } from './ride.entity'; // Додаємо імпорт
-import { MessageEntity } from './message.entity'; // Додаємо імпорт
+import { UserEntity } from './user.entity';
+import { RideEntity } from './ride.entity';
+import { MessageEntity } from './message.entity';
 
 export class ConversationEntity {
     @ApiProperty({ description: 'The unique identifier of the conversation' })
@@ -10,8 +11,8 @@ export class ConversationEntity {
     @ApiProperty({ description: 'The user associated with the conversation' })
     user!: UserEntity;
 
-    @ApiProperty({ description: 'The ride associated with the conversation' })
-    ride!: RideEntity;
+    @ApiProperty({ description: 'The ride associated with the conversation', required: false })
+    ride?: RideEntity;
 
     @ApiProperty({ description: 'The creation date of the conversation' })
     createdAt!: Date;
