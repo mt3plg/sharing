@@ -5,8 +5,8 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import * as dotenv from 'dotenv';
-import * as cors from 'cors';
-import * as express from 'express'; // Додаємо express для явного middleware
+import cors from 'cors'; // Змінено імпорт
+import * as express from 'express';
 
 dotenv.config();
 
