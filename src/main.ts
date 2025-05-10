@@ -4,24 +4,13 @@ import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
-import * as dotenv from 'dotenv';
-import cors from 'cors'; // Змінено імпорт
-import * as express from 'express';
+import * as dotenv from 'dotenv'; // Імпортуємо dotenv
 
+// Завантажуємо змінні середовища з файлу .env
 dotenv.config();
 
 async function bootstrap() {
     const app = await NestFactory.create<NestExpressApplication>(AppModule);
-
-    // Налаштування CORS для всіх запитів
-    app.use(cors({
-        origin: '*',
-        methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-        allowedHeaders: ['Content-Type', 'Authorization'],
-    }));
-
-    // Явне налаштування статичних файлів із CORS
-    app.use('/uploads', cors(), express.static(join(__dirname, '..', 'Uploads')));
 
     // Налаштування Swagger
     const config = new DocumentBuilder()
@@ -35,6 +24,11 @@ async function bootstrap() {
 
     // Налаштування валідації
     app.useGlobalPipes(new ValidationPipe());
+
+    // Налаштування статичного доступу до файлів
+    app.useStaticAssets(join(__dirname, '..', 'uploads'), {
+        prefix: '/uploads/',
+    });
 
     // Отримуємо порт зі змінних середовища або використовуємо 3000 за замовчуванням
     const port = process.env.PORT || 3000;
