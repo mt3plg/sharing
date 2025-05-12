@@ -1,3 +1,4 @@
+// src/users/users.controller.ts
 import {
     Controller,
     Get,
@@ -103,7 +104,7 @@ export class UsersController {
         if (!file.filename) {
             throw new BadRequestException('File upload failed: filename is undefined');
         }
-        const avatarPath = `/uploads/avatars/${file.filename}`;
+        const avatarPath = `/Uploads/avatars/${file.filename}`;
         console.log('Saving avatar with path:', avatarPath);
         const updatedUser = await this.usersService.updateAvatar(req.user.id, avatarPath);
         return updatedUser;
@@ -179,6 +180,17 @@ export class UsersController {
     @ApiResponse({ status: 401, description: 'Неавторизовано.' })
     async checkCanReview(@Param('id') userId: string, @AuthUser() user: any) {
         return this.usersService.checkCanReview(userId, user.id);
+    }
+
+    @Get(':id/can-chat')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Перевірити, чи можна спілкуватися з користувачем' })
+    @ApiResponse({ status: 200, description: 'Повертає, чи можна спілкуватися з користувачем.' })
+    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
+    @ApiResponse({ status: 404, description: 'Користувача не знайдено.' })
+    async checkCanChat(@Param('id') userId: string, @AuthUser() user: any) {
+        return this.usersService.checkCanChat(userId, user.id);
     }
 
     @Post('me/booking-requests')

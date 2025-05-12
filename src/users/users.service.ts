@@ -1,3 +1,4 @@
+// src/users/users.service.ts
 import { Injectable, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CreateUserDto } from '../dto/create-user.dto';
@@ -429,6 +430,52 @@ export class UsersService {
         return {
             success: true,
             canReview: hasSharedRide && !existingReview,
+        };
+    }
+
+    async checkCanChat(userId: string, requesterId: string) {
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+        });
+
+        if (!user) {
+            throw new NotFoundException(`User with ID ${userId} not found`);
+        }
+
+        const requester = await this.prisma.user.findUnique({
+            where: { id: requesterId },
+        });
+
+        if (!requester) {
+            throw new NotFoundException(`Requester with ID ${requesterId} not found`);
+        }
+
+        // Перевіряємо, чи є користувачі друзями
+        const areFriends = await this.prisma.friend.findFirst({
+            where: {
+                OR: [
+                    { userId: requesterId, friendId: userId },
+                    { userId: userId, friendId: requesterId },
+                ],
+            },
+        });
+
+        // Перевіряємо, чи є спільна поїздка
+        const sharedRideAsDriver = await this.prisma.ride.findFirst({
+            where: {
+                OR: [
+                    { driverId: userId, passengerId: requesterId },
+                    { driverId: requesterId, passengerId: userId },
+                ],
+            },
+        });
+
+        const canChat = !!areFriends || !!sharedRideAsDriver;
+        console.log('Check can chat result:', { userId, requesterId, canChat, areFriends: !!areFriends, hasSharedRide: !!sharedRideAsDriver });
+
+        return {
+            success: true,
+            canChat,
         };
     }
 
