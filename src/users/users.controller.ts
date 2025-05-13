@@ -1,4 +1,3 @@
-// users.controller.ts
 import {
     Controller,
     Get,
@@ -80,8 +79,8 @@ export class UsersController {
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @Patch('me/location')
-    @ApiOperation({ summary: "Оновити місце розташування поточного користувача" })
-    @ApiResponse({ status: 200, description: "Місце розташування користувача успішно оновлено." })
+    @ApiOperation({ summary: 'Оновити місце розташування поточного користувача' })
+    @ApiResponse({ status: 200, description: 'Місце розташування користувача успішно оновлено.' })
     @ApiResponse({ status: 401, description: 'Неавторизовано.' })
     async updateLocation(@Request() req, @Body() updateLocationDto: UpdateLocationDto) {
         return this.usersService.updateLocation(req.user.id, updateLocationDto);
@@ -91,8 +90,8 @@ export class UsersController {
     @ApiBearerAuth()
     @Post('me/avatar')
     @ApiConsumes('multipart/form-data')
-    @ApiOperation({ summary: "Завантажити аватар поточного користувача" })
-    @ApiResponse({ status: 200, description: "Аватар користувача успішно завантажено." })
+    @ApiOperation({ summary: 'Завантажити аватар поточного користувача' })
+    @ApiResponse({ status: 200, description: 'Аватар користувача успішно завантажено.' })
     @ApiResponse({ status: 401, description: 'Неавторизовано.' })
     @ApiResponse({ status: 400, description: 'Помилка запиту.' })
     @UseInterceptors(FileInterceptor('avatar'))
@@ -104,7 +103,7 @@ export class UsersController {
         if (!file.filename) {
             throw new BadRequestException('File upload failed: filename is undefined');
         }
-        const avatarPath = `/uploads/avatars/${file.filename}`;
+        const avatarPath = `/Uploads/avatars/${file.filename}`;
         console.log('Saving avatar with path:', avatarPath);
         const updatedUser = await this.usersService.updateAvatar(req.user.id, avatarPath);
         return updatedUser;
@@ -155,9 +154,9 @@ export class UsersController {
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @HttpCode(HttpStatus.CREATED)
-    @ApiOperation({ summary: 'Send a friend request' })
-    @ApiResponse({ status: 201, description: 'Friend request sent successfully.' })
-    @ApiResponse({ status: 401, description: 'Unauthorized.' })
+    @ApiOperation({ summary: 'Надіслати запит на дружбу' })
+    @ApiResponse({ status: 201, description: 'Запит на дружбу успішно надіслано.' })
+    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
     async sendFriendRequest(
         @AuthUser() user: any,
         @Body('receiverId') receiverId: string,
@@ -168,9 +167,9 @@ export class UsersController {
     @Get('friend-requests/incoming')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
-    @ApiOperation({ summary: 'Get incoming friend requests' })
-    @ApiResponse({ status: 200, description: 'Returns list of incoming friend requests.' })
-    @ApiResponse({ status: 401, description: 'Unauthorized.' })
+    @ApiOperation({ summary: 'Отримати вхідні запити на дружбу' })
+    @ApiResponse({ status: 200, description: 'Повертає список вхідних запитів на дружбу.' })
+    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
     async getIncomingFriendRequests(@AuthUser() user: any) {
         return this.usersService.getIncomingFriendRequests(user.id);
     }
@@ -179,9 +178,9 @@ export class UsersController {
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @HttpCode(HttpStatus.OK)
-    @ApiOperation({ summary: 'Accept a friend request' })
-    @ApiResponse({ status: 200, description: 'Friend request accepted.' })
-    @ApiResponse({ status: 401, description: 'Unauthorized.' })
+    @ApiOperation({ summary: 'Прийняти запит на дружбу' })
+    @ApiResponse({ status: 200, description: 'Запит на дружбу прийнято.' })
+    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
     async acceptFriendRequest(
         @Param('id') requestId: string,
         @AuthUser() user: any,
@@ -193,9 +192,9 @@ export class UsersController {
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @HttpCode(HttpStatus.OK)
-    @ApiOperation({ summary: 'Reject a friend request' })
-    @ApiResponse({ status: 200, description: 'Friend request rejected.' })
-    @ApiResponse({ status: 401, description: 'Unauthorized.' })
+    @ApiOperation({ summary: 'Відхилити запит на дружбу' })
+    @ApiResponse({ status: 200, description: 'Запит на дружбу відхилено.' })
+    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
     async rejectFriendRequest(
         @Param('id') requestId: string,
         @AuthUser() user: any,
@@ -206,8 +205,8 @@ export class UsersController {
     @Get('me/friends')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
-    @ApiOperation({ summary: 'Get friends of the current user' })
-    @ApiResponse({ status: 200, description: 'Returns list of friends.' })
+    @ApiOperation({ summary: 'Отримати друзів поточного користувача' })
+    @ApiResponse({ status: 200, description: 'Повертає список друзів.' })
     async getFriends(@AuthUser() user: any) {
         return this.usersService.getFriends(user.id);
     }
@@ -215,9 +214,9 @@ export class UsersController {
     @Get('search')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
-    @ApiOperation({ summary: 'Search users by name or email with pagination and category filter' })
-    @ApiResponse({ status: 200, description: 'Returns a list of users.' })
-    @ApiResponse({ status: 401, description: 'Unauthorized.' })
+    @ApiOperation({ summary: 'Пошук користувачів за ім’ям або email з пагінацією та фільтром за категорією' })
+    @ApiResponse({ status: 200, description: 'Повертає список користувачів.' })
+    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
     async searchUsers(
         @Query() queryDto: SearchUsersQueryDto,
         @AuthUser() user: any,
