@@ -327,51 +327,63 @@ export class UsersService {
     }
 
     async createFriendRequest(senderId: string, receiverId: string) {
+        this.logger.log(`Attempting to create friend request: senderId=${senderId}, receiverId=${receiverId}`);
+    
         if (senderId === receiverId) {
+            this.logger.warn('Sender and receiver are the same');
             throw new BadRequestException('Cannot send friend request to yourself');
         }
-
-        const existingRequest = await this.prisma.friendRequest.findFirst({
-            where: {
-                senderId,
-                receiverId,
-                status: 'pending',
-            },
-        });
-
-        if (existingRequest) {
-            throw new BadRequestException('Friend request already sent');
+    
+        try {
+            this.logger.log('Checking for existing friend request');
+            const existingRequest = await this.prisma.friendRequest.findFirst({
+                where: {
+                    senderId,
+                    receiverId,
+                    status: 'pending',
+                },
+            });
+    
+            if (existingRequest) {
+                this.logger.warn('Friend request already exists');
+                throw new BadRequestException('Friend request already sent');
+            }
+    
+            this.logger.log('Checking if users are already friends');
+            const areFriends = await this.prisma.friend.findFirst({
+                where: {
+                    OR: [
+                        { userId: senderId, friendId: receiverId },
+                        { userId: receiverId, friendId: senderId },
+                    ],
+                },
+            });
+    
+            if (areFriends) {
+                this.logger.warn('Users are already friends');
+                throw new BadRequestException('Users are already friends');
+            }
+    
+            this.logger.log('Creating new friend request');
+            const friendRequest = await this.prisma.friendRequest.create({
+                data: {
+                    senderId,
+                    receiverId,
+                    status: 'pending',
+                },
+                include: {
+                    sender: { select: { id: true, name: true, avatar: true } },
+                    receiver: { select: { id: true, name: true, avatar: true } },
+                },
+            });
+    
+            this.logger.log(`Friend request created: ${senderId} -> ${receiverId}`);
+            return { success: true, friendRequest };
+        } catch (error) {
+            this.logger.error(`Failed to create friend request: ${error.message}`, error.stack);
+            throw new BadRequestException(`Failed to create friend request: ${error.message}`);
         }
-
-        const areFriends = await this.prisma.friend.findFirst({
-            where: {
-                OR: [
-                    { userId: senderId, friendId: receiverId },
-                    { userId: receiverId, friendId: senderId },
-                ],
-            },
-        });
-
-        if (areFriends) {
-            throw new BadRequestException('Users are already friends');
-        }
-
-        const friendRequest = await this.prisma.friendRequest.create({
-            data: {
-                senderId,
-                receiverId,
-                status: 'pending',
-            },
-            include: {
-                sender: { select: { id: true, name: true, avatar: true } },
-                receiver: { select: { id: true, name: true, avatar: true } },
-            },
-        });
-
-        this.logger.log(`Friend request created: ${senderId} -> ${receiverId}`);
-        return { success: true, friendRequest };
     }
-
     async getIncomingFriendRequests(userId: string) {
         const requests = await this.prisma.friendRequest.findMany({
             where: {
