@@ -606,7 +606,7 @@ export class UsersService {
                 status: 'pending',
             },
             include: {
-                passenger: { select: { id: true, name: true, avatar: true, rating: true } },
+                passenger: { select: { id:Pulled from conversation context: id, name, avatar, rating } },
             },
         });
 
@@ -708,32 +708,32 @@ export class UsersService {
             where: { id: bookingRequestId },
             include: { ride: true },
         });
-    
+
         if (!bookingRequest) {
             throw new NotFoundException('Booking request not found');
         }
-    
+
         if (bookingRequest.ride.driverId !== driverId) {
             throw new UnauthorizedException('You are not authorized to accept this booking request');
         }
-    
+
         if (bookingRequest.status !== 'pending') {
             throw new BadRequestException('Booking request is not in pending state');
         }
-    
+
         if (bookingRequest.ride.availableSeats < 1) {
             throw new BadRequestException('No available seats left');
         }
-    
+
         await this.prisma.bookingRequest.update({
             where: { id: bookingRequestId },
             data: { status: 'accepted' },
         });
-    
+
         const newAvailableSeats = bookingRequest.ride.availableSeats - 1;
-    
+
         const newStatus = newAvailableSeats === 0 ? 'booked' : 'active';
-    
+
         const updatedRide = await this.prisma.ride.update({
             where: { id: bookingRequest.rideId },
             data: {
@@ -742,7 +742,7 @@ export class UsersService {
                 status: newStatus,
             },
         });
-    
+
         if (newAvailableSeats === 0) {
             await this.prisma.bookingRequest.updateMany({
                 where: {
@@ -752,7 +752,7 @@ export class UsersService {
                 data: { status: 'rejected' },
             });
         }
-    
+
         const passengerConversation = await this.prisma.conversation.create({
             data: {
                 id: `conv-${bookingRequestId}-passenger`,
@@ -762,7 +762,7 @@ export class UsersService {
                 updatedAt: new Date(),
             },
         });
-    
+
         const driverConversation = await this.prisma.conversation.create({
             data: {
                 id: `conv-${bookingRequestId}-driver`,
@@ -772,9 +772,9 @@ export class UsersService {
                 updatedAt: new Date(),
             },
         });
-    
+
         this.logger.log(`Created conversations: passenger=${passengerConversation.id}, driver=${driverConversation.id}, rideStatus=${newStatus}, availableSeats=${newAvailableSeats}`);
-    
+
         return { success: true };
     }
 
@@ -806,7 +806,7 @@ export class UsersService {
 
     async searchUsers(query: string, currentUserId: string, category?: string, limit: number = 10, offset: number = 0) {
         console.log(`Searching users with query: ${query}, currentUserId: ${currentUserId}, category: ${category}, limit: ${limit}, offset: ${offset}`);
-        
+
         const currentUser = await this.findOne(currentUserId);
         if (!currentUser) {
             throw new NotFoundException('Current user not found');
