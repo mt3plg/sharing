@@ -9,34 +9,33 @@ datasource db {
 }
 
 model User {
-  id                String           @id @default(uuid())
-  name              String
-  email             String           @unique
-  phone             String           @unique
-  password          String
-  status            String           @default("pending")
-  verificationToken String?
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
-  locationName      String?
-  latitude          Float?
-  longitude         Float?
-  rating            Float?           @default(0.0)
-  driverTrips       Int?             @default(0)
-  passengerTrips    Int?             @default(0)
-  avatar            String?
-  driverRides       Ride[]           @relation("DriverRides")
-  passengerRides    Ride[]           @relation("PassengerRides")
-  conversations     Conversation[]   @relation("UserConversations")
-  messages          Message[]        @relation("UserMessages")
-  reviewsReceived   Review[]         @relation("UserReviews")
-  reviewsGiven      Review[]         @relation("AuthorReviews")
-  friendsInitiated  Friend[]         @relation("UserFriends")
-  friendsReceived   Friend[]         @relation("FriendFriends")
-  bookingRequests   BookingRequest[] @relation("UserBookingRequests")
-
-  @@index([name])
-  @@index([email])
+  id                     String           @id @default(uuid())
+  name                   String
+  email                  String           @unique
+  phone                  String           @unique
+  password               String
+  status                 String           @default("pending")
+  verificationToken      String?
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+  locationName           String?
+  latitude               Float?
+  longitude              Float?
+  rating                 Float?           @default(0.0)
+  driverTrips            Int?             @default(0)
+  passengerTrips         Int?             @default(0)
+  avatar                 String?
+  driverRides            Ride[]           @relation("DriverRides")
+  passengerRides         Ride[]           @relation("PassengerRides")
+  conversations          Conversation[]   @relation("UserConversations")
+  messages               Message[]        @relation("UserMessages")
+  reviewsReceived        Review[]         @relation("UserReviews")
+  reviewsGiven           Review[]         @relation("AuthorReviews")
+  friendsInitiated       Friend[]         @relation("UserFriends")
+  friendsReceived        Friend[]         @relation("FriendFriends")
+  bookingRequests        BookingRequest[] @relation("UserBookingRequests")
+  sentFriendRequests     FriendRequest[]  @relation("SentFriendRequests")
+  receivedFriendRequests FriendRequest[]  @relation("ReceivedFriendRequests")
 }
 
 model Ride {
@@ -112,4 +111,18 @@ model BookingRequest {
   passenger   User     @relation("UserBookingRequests", fields: [passengerId], references: [id])
   status      String   @default("pending")
   createdAt   DateTime @default(now())
+}
+
+model FriendRequest {
+  id         String   @id @default(uuid())
+  senderId   String
+  receiverId String
+  status     String   @default("pending") // pending, accepted, rejected
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  sender     User     @relation("SentFriendRequests", fields: [senderId], references: [id])
+  receiver   User     @relation("ReceivedFriendRequests", fields: [receiverId], references: [id])
+
+  @@index([senderId])
+  @@index([receiverId])
 }

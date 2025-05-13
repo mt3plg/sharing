@@ -1,3 +1,4 @@
+// users.controller.ts
 import {
     Controller,
     Get,
@@ -103,7 +104,7 @@ export class UsersController {
         if (!file.filename) {
             throw new BadRequestException('File upload failed: filename is undefined');
         }
-        const avatarPath = `/uploads/avatars/${file.filename}`;
+        const avatarPath = `/Uploads/avatars/${file.filename}`;
         console.log('Saving avatar with path:', avatarPath);
         const updatedUser = await this.usersService.updateAvatar(req.user.id, avatarPath);
         return updatedUser;
@@ -150,35 +151,84 @@ export class UsersController {
         return this.usersService.createReview(userId, createReviewDto, user.id);
     }
 
-    @Post('friends')
+    @Post('friend-requests')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @HttpCode(HttpStatus.CREATED)
-    @ApiOperation({ summary: 'Додати користувача в друзі' })
-    @ApiResponse({ status: 201, description: 'Користувача успішно додано в друзі.' })
-    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
-    async addFriend(@Body('friendId') friendId: string, @AuthUser() user: any) {
-        return this.usersService.addFriend(user.id, friendId);
+    @ApiOperation({ summary: 'Send a friend request' })
+    @ApiResponse({ status: 201, description: 'Friend request sent successfully.' })
+    @ApiResponse({ status: 401, description: 'Unauthorized.' })
+    async sendFriendRequest(
+        @AuthUser() user: any,
+        @Body('receiverId') receiverId: string,
+    ) {
+        return this.usersService.createFriendRequest(user.id, receiverId);
     }
 
-    @Get('me/reviews')
+    @Get('friend-requests/incoming')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
-    @ApiOperation({ summary: 'Отримати відгуки поточного користувача' })
-    @ApiResponse({ status: 200, description: 'Повертає список відгуків.' })
-    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
-    async getUserReviews(@AuthUser() user: any) {
-        return this.usersService.getUserReviews(user.id);
+    @ApiOperation({ summary: 'Get incoming friend requests' })
+    @ApiResponse({ status: 200, description: 'Returns list of incoming friend requests.' })
+    @ApiResponse({ status: 401, description: 'Unauthorized.' })
+    async getIncomingFriendRequests(@AuthUser() user: any) {
+        return this.usersService.getIncomingFriendRequests(user.id);
     }
 
-    @Get(':id/can-review')
+    @Patch('friend-requests/:id/accept')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
-    @ApiOperation({ summary: 'Перевірити, чи можна залишити відгук користувачу' })
-    @ApiResponse({ status: 200, description: 'Повертає, чи можна залишити відгук.' })
-    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
-    async checkCanReview(@Param('id') userId: string, @AuthUser() user: any) {
-        return this.usersService.checkCanReview(userId, user.id);
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({ summary: 'Accept a friend request' })
+    @ApiResponse({ status: 200, description: 'Friend request accepted.' })
+    @ApiResponse({ status: 401, description: 'Unauthorized.' })
+    async acceptFriendRequest(
+        @Param('id') requestId: string,
+        @AuthUser() user: any,
+    ) {
+        return this.usersService.acceptFriendRequest(requestId, user.id);
+    }
+
+    @Patch('friend-requests/:id/reject')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({ summary: 'Reject a friend request' })
+    @ApiResponse({ status: 200, description: 'Friend request rejected.' })
+    @ApiResponse({ status: 401, description: 'Unauthorized.' })
+    async rejectFriendRequest(
+        @Param('id') requestId: string,
+        @AuthUser() user: any,
+    ) {
+        return this.usersService.rejectFriendRequest(requestId, user.id);
+    }
+
+    @Get('me/friends')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Get friends of the current user' })
+    @ApiResponse({ status: 200, description: 'Returns list of friends.' })
+    async getFriends(@AuthUser() user: any) {
+        return this.usersService.getFriends(user.id);
+    }
+
+    @Get('search')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Search users by name or email with pagination and category filter' })
+    @ApiResponse({ status: 200, description: 'Returns a list of users.' })
+    @ApiResponse({ status: 401, description: 'Unauthorized.' })
+    async searchUsers(
+        @Query() queryDto: SearchUsersQueryDto,
+        @AuthUser() user: any,
+    ) {
+        return this.usersService.searchUsers(
+            queryDto.query,
+            user.id,
+            queryDto.category,
+            queryDto.limit,
+            queryDto.offset,
+        );
     }
 
     @Post('me/booking-requests')
@@ -232,33 +282,4 @@ export class UsersController {
     ) {
         return this.usersService.rejectBookingRequest(bookingRequestId, user.id);
     }
-
-    @Get('search')
-    @UseGuards(JwtAuthGuard)
-    @ApiBearerAuth()
-    @ApiOperation({ summary: 'Search users by name or email with pagination and category filter' })
-    @ApiResponse({ status: 200, description: 'Returns a list of users.' })
-    @ApiResponse({ status: 401, description: 'Unauthorized.' })
-    async searchUsers(
-        @Query() queryDto: SearchUsersQueryDto,
-        @AuthUser() user: any,
-    ) {
-        return this.usersService.searchUsers(
-            queryDto.query,
-            user.id,
-            queryDto.category,
-            queryDto.limit,
-            queryDto.offset,
-        );
-    }
-
-    // users.controller.ts
-@Get('me/friends')
-@UseGuards(JwtAuthGuard)
-@ApiBearerAuth()
-@ApiOperation({ summary: 'Get friends of the current user' })
-@ApiResponse({ status: 200, description: 'Returns list of friends.' })
-async getFriends(@AuthUser() user: any) {
-    return this.usersService.getFriends(user.id);
-}
 }

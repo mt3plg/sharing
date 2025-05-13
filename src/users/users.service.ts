@@ -1,3 +1,4 @@
+// users.service.ts
 import { Injectable, NotFoundException, BadRequestException, UnauthorizedException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CreateUserDto } from '../dto/create-user.dto';
@@ -325,6 +326,132 @@ export class UsersService {
         };
     }
 
+    async createFriendRequest(senderId: string, receiverId: string) {
+        if (senderId === receiverId) {
+            throw new BadRequestException('Cannot send friend request to yourself');
+        }
+
+        const existingRequest = await this.prisma.friendRequest.findFirst({
+            where: {
+                senderId,
+                receiverId,
+                status: 'pending',
+            },
+        });
+
+        if (existingRequest) {
+            throw new BadRequestException('Friend request already sent');
+        }
+
+        const areFriends = await this.prisma.friend.findFirst({
+            where: {
+                OR: [
+                    { userId: senderId, friendId: receiverId },
+                    { userId: receiverId, friendId: senderId },
+                ],
+            },
+        });
+
+        if (areFriends) {
+            throw new BadRequestException('Users are already friends');
+        }
+
+        const friendRequest = await this.prisma.friendRequest.create({
+            data: {
+                senderId,
+                receiverId,
+                status: 'pending',
+            },
+            include: {
+                sender: { select: { id: true, name: true, avatar: true } },
+                receiver: { select: { id: true, name: true, avatar: true } },
+            },
+        });
+
+        this.logger.log(`Friend request created: ${senderId} -> ${receiverId}`);
+        return { success: true, friendRequest };
+    }
+
+    async getIncomingFriendRequests(userId: string) {
+        const requests = await this.prisma.friendRequest.findMany({
+            where: {
+                receiverId: userId,
+                status: 'pending',
+            },
+            include: {
+                sender: { select: { id: true, name: true, avatar: true } },
+            },
+        });
+
+        return { success: true, requests };
+    }
+
+    async acceptFriendRequest(requestId: string, userId: string) {
+        const friendRequest = await this.prisma.friendRequest.findUnique({
+            where: { id: requestId },
+        });
+
+        if (!friendRequest) {
+            throw new NotFoundException('Friend request not found');
+        }
+
+        if (friendRequest.receiverId !== userId) {
+            throw new BadRequestException('You are not authorized to accept this request');
+        }
+
+        if (friendRequest.status !== 'pending') {
+            throw new BadRequestException('Friend request is not pending');
+        }
+
+        await this.prisma.$transaction([
+            this.prisma.friendRequest.update({
+                where: { id: requestId },
+                data: { status: 'accepted' },
+            }),
+            this.prisma.friend.create({
+                data: {
+                    userId: friendRequest.senderId,
+                    friendId: friendRequest.receiverId,
+                },
+            }),
+            this.prisma.friend.create({
+                data: {
+                    userId: friendRequest.receiverId,
+                    friendId: friendRequest.senderId,
+                },
+            }),
+        ]);
+
+        this.logger.log(`Friend request accepted: ${requestId}`);
+        return { success: true };
+    }
+
+    async rejectFriendRequest(requestId: string, userId: string) {
+        const friendRequest = await this.prisma.friendRequest.findUnique({
+            where: { id: requestId },
+        });
+
+        if (!friendRequest) {
+            throw new NotFoundException('Friend request not found');
+        }
+
+        if (friendRequest.receiverId !== userId) {
+            throw new BadRequestException('You are not authorized to reject this request');
+        }
+
+        if (friendRequest.status !== 'pending') {
+            throw new BadRequestException('Friend request is not pending');
+        }
+
+        await this.prisma.friendRequest.update({
+            where: { id: requestId },
+            data: { status: 'rejected' },
+        });
+
+        this.logger.log(`Friend request rejected: ${requestId}`);
+        return { success: true };
+    }
+
     async addFriend(userId: string, friendId: string) {
         const user = await this.prisma.user.findUnique({
             where: { id: userId },
@@ -338,22 +465,24 @@ export class UsersService {
             throw new NotFoundException('User or friend not found');
         }
 
+        if (userId === friendId) {
+            throw new BadRequestException('Cannot add yourself as a friend');
+        }
+
         const existingFriendship = await this.prisma.friend.findFirst({
-            where: { userId, friendId },
+            where: {
+                OR: [
+                    { userId, friendId },
+                    { userId: friendId, friendId: userId },
+                ],
+            },
         });
 
         if (existingFriendship) {
             throw new BadRequestException('Users are already friends');
         }
 
-        await this.prisma.friend.create({
-            data: {
-                userId,
-                friendId,
-            },
-        });
-
-        return { success: true };
+        throw new BadRequestException('Use friend request system to add friends');
     }
 
     async getUserReviews(userId: string) {
@@ -596,19 +725,15 @@ export class UsersService {
             throw new BadRequestException('No available seats left');
         }
     
-        // Оновлюємо статус запиту на бронювання
         await this.prisma.bookingRequest.update({
             where: { id: bookingRequestId },
             data: { status: 'accepted' },
         });
     
-        // Обчислюємо нову кількість вільних місць
         const newAvailableSeats = bookingRequest.ride.availableSeats - 1;
     
-        // Встановлюємо статус booked, лише якщо вільних місць не залишилося
         const newStatus = newAvailableSeats === 0 ? 'booked' : 'active';
     
-        // Оновлюємо поїздку
         const updatedRide = await this.prisma.ride.update({
             where: { id: bookingRequest.rideId },
             data: {
@@ -618,7 +743,6 @@ export class UsersService {
             },
         });
     
-        // Відхиляємо інші запити, якщо немає місць
         if (newAvailableSeats === 0) {
             await this.prisma.bookingRequest.updateMany({
                 where: {
@@ -629,7 +753,6 @@ export class UsersService {
             });
         }
     
-        // Створюємо бесіду для пасажира (категорія "Drivers")
         const passengerConversation = await this.prisma.conversation.create({
             data: {
                 id: `conv-${bookingRequestId}-passenger`,
@@ -640,7 +763,6 @@ export class UsersService {
             },
         });
     
-        // Створюємо бесіду для водія (категорія "Passengers")
         const driverConversation = await this.prisma.conversation.create({
             data: {
                 id: `conv-${bookingRequestId}-driver`,
@@ -790,33 +912,32 @@ export class UsersService {
         return { success: true, users: filteredUsers, total };
     }
 
-    // users.service.ts
-async getFriends(userId: string) {
-    const user = await this.prisma.user.findUnique({
-        where: { id: userId },
-        include: {
-            friendsInitiated: { include: { friend: { select: { id: true, name: true, avatar: true } } } },
-            friendsReceived: { include: { user: { select: { id: true, name: true, avatar: true } } } },
-        },
-    });
+    async getFriends(userId: string) {
+        const user = await this.prisma.user.findUnique({
+            where: { id: userId },
+            include: {
+                friendsInitiated: { include: { friend: { select: { id: true, name: true, avatar: true } } } },
+                friendsReceived: { include: { user: { select: { id: true, name: true, avatar: true } } } },
+            },
+        });
 
-    if (!user) {
-        throw new NotFoundException('User not found');
+        if (!user) {
+            throw new NotFoundException('User not found');
+        }
+
+        const friends = [
+            ...user.friendsInitiated.map(f => ({
+                id: f.friend.id,
+                name: f.friend.name,
+                avatar: f.friend.avatar,
+            })),
+            ...user.friendsReceived.map(f => ({
+                id: f.user.id,
+                name: f.user.name,
+                avatar: f.user.avatar,
+            })),
+        ];
+
+        return { success: true, friends };
     }
-
-    const friends = [
-        ...user.friendsInitiated.map(f => ({
-            id: f.friend.id,
-            name: f.friend.name,
-            avatar: f.friend.avatar,
-        })),
-        ...user.friendsReceived.map(f => ({
-            id: f.user.id,
-            name: f.user.name,
-            avatar: f.user.avatar,
-        })),
-    ];
-
-    return { success: true, friends };
-}
 }
