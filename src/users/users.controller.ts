@@ -251,4 +251,14 @@ export class UsersController {
             queryDto.offset,
         );
     }
+
+    // users.controller.ts
+@Get('me/friends')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
+@ApiOperation({ summary: 'Get friends of the current user' })
+@ApiResponse({ status: 200, description: 'Returns list of friends.' })
+async getFriends(@AuthUser() user: any) {
+    return this.usersService.getFriends(user.id);
+}
 }

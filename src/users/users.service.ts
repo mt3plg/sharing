@@ -1,4 +1,3 @@
-// src/users/users.service.ts
 import { Injectable, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CreateUserDto } from '../dto/create-user.dto';
@@ -433,52 +432,6 @@ export class UsersService {
         };
     }
 
-    async checkCanChat(userId: string, requesterId: string) {
-        const user = await this.prisma.user.findUnique({
-            where: { id: userId },
-        });
-
-        if (!user) {
-            throw new NotFoundException(`User with ID ${userId} not found`);
-        }
-
-        const requester = await this.prisma.user.findUnique({
-            where: { id: requesterId },
-        });
-
-        if (!requester) {
-            throw new NotFoundException(`Requester with ID ${requesterId} not found`);
-        }
-
-        // Перевіряємо, чи є користувачі друзями
-        const areFriends = await this.prisma.friend.findFirst({
-            where: {
-                OR: [
-                    { userId: requesterId, friendId: userId },
-                    { userId: userId, friendId: requesterId },
-                ],
-            },
-        });
-
-        // Перевіряємо, чи є спільна поїздка
-        const sharedRideAsDriver = await this.prisma.ride.findFirst({
-            where: {
-                OR: [
-                    { driverId: userId, passengerId: requesterId },
-                    { driverId: requesterId, passengerId: userId },
-                ],
-            },
-        });
-
-        const canChat = !!areFriends || !!sharedRideAsDriver;
-        console.log('Check can chat result:', { userId, requesterId, canChat, areFriends: !!areFriends, hasSharedRide: !!sharedRideAsDriver });
-
-        return {
-            success: true,
-            canChat,
-        };
-    }
-
     async createBookingRequest(rideId: string, passengerId: string) {
         const ride = await this.prisma.ride.findUnique({
             where: { id: rideId },
@@ -804,4 +757,34 @@ export class UsersService {
         console.log('Search results:', filteredUsers);
         return { success: true, users: filteredUsers, total };
     }
+
+    // users.service.ts
+async getFriends(userId: string) {
+    const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        include: {
+            friendsInitiated: { include: { friend: { select: { id: true, name: true, avatar: true } } } },
+            friendsReceived: { include: { user: { select: { id: true, name: true, avatar: true } } } },
+        },
+    });
+
+    if (!user) {
+        throw new NotFoundException('User not found');
+    }
+
+    const friends = [
+        ...user.friendsInitiated.map(f => ({
+            id: f.friend.id,
+            name: f.friend.name,
+            avatar: f.friend.avatar,
+        })),
+        ...user.friendsReceived.map(f => ({
+            id: f.user.id,
+            name: f.user.name,
+            avatar: f.user.avatar,
+        })),
+    ];
+
+    return { success: true, friends };
+}
 }
