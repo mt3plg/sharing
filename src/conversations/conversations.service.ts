@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CreateConversationDto, CreateMessageDto } from './interfaces/interfaces_conversation.interface';
 import { Logger } from '@nestjs/common';
@@ -13,22 +13,28 @@ export class ConversationsService {
         const { rideId, userId: targetUserId } = createConversationDto;
 
         this.logger.log(`Creating conversation for userId: ${userId}, targetUserId: ${targetUserId}, rideId: ${rideId}`);
-        if (rideId) {
-            const ride = await this.prisma.ride.findUnique({ where: { id: rideId } });
-            if (!ride) {
-                this.logger.error('Ride not found:', rideId);
-                throw new NotFoundException('Ride not found');
-            }
+        
+        // Перевіряємо, чи передано rideId, оскільки воно обов'язкове в схемі Prisma
+        if (!rideId) {
+            this.logger.error('rideId is required to create a conversation');
+            throw new BadRequestException('rideId is required');
+        }
+
+        // Перевіряємо існування поїздки
+        const ride = await this.prisma.ride.findUnique({ where: { id: rideId } });
+        if (!ride) {
+            this.logger.error('Ride not found:', rideId);
+            throw new NotFoundException('Ride not found');
         }
 
         const conversation = await this.prisma.conversation.create({
             data: {
                 userId: targetUserId,
-                rideId: rideId, // Залишаємо rideId як є, воно може бути undefined
+                rideId: rideId, // rideId гарантовано string
             },
             include: {
                 user: { select: { id: true, name: true, avatar: true } },
-                ride: rideId ? true : false,
+                ride: true,
             },
         });
 
