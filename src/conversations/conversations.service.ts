@@ -1,4 +1,3 @@
-// src/conversations/conversations.service.ts
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CreateConversationDto, CreateMessageDto } from './interfaces/interfaces_conversation.interface';
@@ -25,8 +24,8 @@ export class ConversationsService {
         const conversation = await this.prisma.conversation.create({
             data: {
                 userId: targetUserId,
-             rideId: rideId || null, // Залишаємо null, оскільки schema.prisma визначає String?
-            } as any, // Тимчасове приведення для обходу помилки типізації
+                rideId: rideId || null,
+            },
             include: {
                 user: { select: { id: true, name: true, avatar: true } },
                 ride: rideId ? true : false,
@@ -144,13 +143,14 @@ export class ConversationsService {
             },
         });
         this.logger.log('Conversations from DB:', conversations);
-    
+
         const formattedConversations = await Promise.all(
             conversations.map(async (conversation) => {
                 const isUserTheDriver = conversation.ride?.driverId === userId;
                 let contact;
                 let category;
-    
+
+                // Перевірка дружби
                 const areFriends = await this.prisma.friend.findFirst({
                     where: {
                         OR: [
@@ -159,8 +159,9 @@ export class ConversationsService {
                         ],
                     },
                 });
-    
-                // Пріоритет для категорії "Friends"
+
+                this.logger.log(`Conversation ${conversation.id}: userId=${userId}, targetUserId=${conversation.userId}, areFriends=${!!areFriends}`);
+
                 if (areFriends) {
                     category = 'Friends';
                     contact = conversation.userId === userId && conversation.ride ? conversation.ride.driver : conversation.user;
@@ -171,7 +172,9 @@ export class ConversationsService {
                     category = 'Drivers';
                     contact = conversation.ride?.driver;
                 }
-    
+
+                this.logger.log(`Conversation ${conversation.id}: category=${category}, contactId=${contact?.id}`);
+
                 const unreadMessages = await this.prisma.message.count({
                     where: {
                         conversationId: conversation.id,
@@ -179,7 +182,7 @@ export class ConversationsService {
                         read: false,
                     },
                 });
-    
+
                 return {
                     id: conversation.id,
                     userId: conversation.userId,
@@ -198,7 +201,7 @@ export class ConversationsService {
                 };
             }),
         );
-    
+
         this.logger.log('Formatted conversations:', formattedConversations);
         return { success: true, conversations: formattedConversations };
     }
