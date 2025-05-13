@@ -144,50 +144,54 @@ export class RidesService {
     const userStartCoords = startCoords || (await this.geocodeAddress(startLocation));
     const userEndCoords = endCoords || (await this.geocodeAddress(endLocation));
 
+    const departureDate = new Date(departureTime);
+    const minDate = new Date(departureDate);
+    minDate.setDate(departureDate.getDate() - dateRange);
+    const maxDate = new Date(departureDate);
+    maxDate.setDate(departureDate.getDate() + dateRange);
+
+    this.logger.log(`Date range: minDate=${minDate.toISOString()}, maxDate=${maxDate.toISOString()}`);
+
     const rides = await this.prisma.ride.findMany({
-      where: {
-        status: 'active',
-        availableSeats: { gte: passengers },
-      },
-      include: {
-        driver: { select: { id: true, name: true, avatar: true, rating: true } },
-      },
+        where: {
+            status: { in: ['active', 'booked'] }, // Додано 'booked'
+            availableSeats: { gte: passengers },
+            departureTime: {
+                gte: minDate,
+                lte: maxDate,
+            },
+        },
+        include: {
+            driver: { select: { id: true, name: true, avatar: true, rating: true } },
+        },
     });
 
     this.logger.log(`Found rides before filtering: ${JSON.stringify(rides, null, 2)}`);
 
     const filteredRides: FilteredRide[] = [];
     for (const ride of rides) {
-      const rideDate = new Date(ride.departureTime);
-      const searchDate = new Date(departureTime);
-      const dateDiff = Math.abs((rideDate.getTime() - searchDate.getTime()) / (1000 * 60 * 60 * 24));
-      if (dateDiff > dateRange) {
-        this.logger.log(`Ride ${ride.id} filtered out: date difference ${dateDiff} exceeds dateRange ${dateRange}`);
-        continue;
-      }
+        if (!ride.startCoordsLat || !ride.startCoordsLng || !ride.endCoordsLat || !ride.endCoordsLng) {
+            this.logger.log(`Ride ${ride.id} filtered out: missing coordinates`);
+            continue;
+        }
 
-      if (!ride.startCoordsLat || !ride.startCoordsLng || !ride.endCoordsLat || !ride.endCoordsLng) {
-        this.logger.log(`Ride ${ride.id} filtered out: missing coordinates`);
-        continue;
-      }
+        const rideStartCoords = { lat: ride.startCoordsLat, lng: ride.startCoordsLng };
+        const rideEndCoords = { lat: ride.endCoordsLat, lng: ride.endCoordsLng };
+        const startDistance = this.haversineDistance(userStartCoords, rideStartCoords);
+        const endDistance = this.haversineDistance(userEndCoords, rideEndCoords);
 
-      const rideStartCoords = { lat: ride.startCoordsLat, lng: ride.startCoordsLng };
-      const rideEndCoords = { lat: ride.endCoordsLat, lng: ride.endCoordsLng };
-      const startDistance = this.haversineDistance(userStartCoords, rideStartCoords);
-      const endDistance = this.haversineDistance(userEndCoords, rideEndCoords);
+        this.logger.log(`Ride ${ride.id}: startDistance=${startDistance.toFixed(2)} km, endDistance=${endDistance.toFixed(2)} km`);
 
-      this.logger.log(`Ride ${ride.id}: startDistance=${startDistance.toFixed(2)} km, endDistance=${endDistance.toFixed(2)} km`);
-
-      if (startDistance <= maxDistance && endDistance <= maxDistance) {
-        filteredRides.push({
-          ...ride,
-          startDistance,
-          endDistance,
-          totalDistance: startDistance + endDistance,
-        });
-      } else {
-        this.logger.log(`Ride ${ride.id} filtered out: startDistance=${startDistance.toFixed(2)} or endDistance=${endDistance.toFixed(2)} exceeds maxDistance ${maxDistance}`);
-      }
+        if (startDistance <= maxDistance && endDistance <= maxDistance) {
+            filteredRides.push({
+                ...ride,
+                startDistance,
+                endDistance,
+                totalDistance: startDistance + endDistance,
+            });
+        } else {
+            this.logger.log(`Ride ${ride.id} filtered out: startDistance=${startDistance.toFixed(2)} or endDistance=${endDistance.toFixed(2)} exceeds maxDistance ${maxDistance}`);
+        }
     }
 
     this.logger.log(`Filtered rides: ${JSON.stringify(filteredRides, null, 2)}`);
@@ -195,7 +199,7 @@ export class RidesService {
     filteredRides.sort((a, b) => a.totalDistance - b.totalDistance);
 
     return { success: true, rides: filteredRides };
-  }
+}
 
   async findOne(id: string) {
     const ride = await this.prisma.ride.findUnique({
