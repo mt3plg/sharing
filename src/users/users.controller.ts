@@ -150,6 +150,16 @@ export class UsersController {
         return this.usersService.createReview(userId, createReviewDto, user.id);
     }
 
+    @Get('me/reviews')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Отримати відгуки поточного користувача' })
+    @ApiResponse({ status: 200, description: 'Повертає список відгуків користувача.' })
+    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
+    async getUserReviews(@AuthUser() user: any) {
+        return this.usersService.getUserReviews(user.id);
+    }
+
     @Post('friend-requests')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
