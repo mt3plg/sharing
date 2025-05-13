@@ -602,18 +602,24 @@ export class UsersService {
             data: { status: 'accepted' },
         });
     
+        // Обчислюємо нову кількість вільних місць
+        const newAvailableSeats = bookingRequest.ride.availableSeats - 1;
+    
+        // Встановлюємо статус booked, лише якщо вільних місць не залишилося
+        const newStatus = newAvailableSeats === 0 ? 'booked' : 'active';
+    
         // Оновлюємо поїздку
         const updatedRide = await this.prisma.ride.update({
             where: { id: bookingRequest.rideId },
             data: {
-                availableSeats: { decrement: 1 },
+                availableSeats: newAvailableSeats,
                 passengerId: bookingRequest.passengerId,
-                status: 'booked',
+                status: newStatus,
             },
         });
     
         // Відхиляємо інші запити, якщо немає місць
-        if (updatedRide.availableSeats === 0) {
+        if (newAvailableSeats === 0) {
             await this.prisma.bookingRequest.updateMany({
                 where: {
                     rideId: bookingRequest.rideId,
@@ -645,7 +651,7 @@ export class UsersService {
             },
         });
     
-        this.logger.log(`Created conversations: passenger=${passengerConversation.id}, driver=${driverConversation.id}`);
+        this.logger.log(`Created conversations: passenger=${passengerConversation.id}, driver=${driverConversation.id}, rideStatus=${newStatus}, availableSeats=${newAvailableSeats}`);
     
         return { success: true };
     }
