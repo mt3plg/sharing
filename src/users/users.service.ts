@@ -379,11 +379,15 @@ export class UsersService {
     
             this.logger.log(`Friend request created: ${senderId} -> ${receiverId}`);
             return { success: true, friendRequest };
-        } catch (error) {
-            this.logger.error(`Failed to create friend request: ${error.message}`, error.stack);
-            throw new BadRequestException(`Failed to create friend request: ${error.message}`);
+        } catch (error: unknown) {
+            // Приведення типу error до Error
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+            const errorStack = error instanceof Error ? error.stack : undefined;
+            this.logger.error(`Failed to create friend request: ${errorMessage}`, errorStack);
+            throw new BadRequestException(`Failed to create friend request: ${errorMessage}`);
         }
     }
+
     async getIncomingFriendRequests(userId: string) {
         const requests = await this.prisma.friendRequest.findMany({
             where: {
