@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CreateRideDto, SearchRideDto } from './interfaces/interfaces_ride.interface';
 import axios from 'axios';
@@ -34,7 +34,7 @@ export interface FilteredRide {
 @Injectable()
 export class RidesService {
   constructor(private readonly prisma: PrismaService) {}
-
+  private readonly logger = new Logger(RidesService.name);
   // Функція для геокодування адреси
   private async geocodeAddress(address: string): Promise<{ lat: number; lng: number }> {
     const apiKey = process.env.GOOGLE_API_KEY || 'AIzaSyATQMZZLlcjmR9chpaKM-4YJXwZ9c5iPtk'; // Використовуйте змінну середовища
@@ -137,55 +137,61 @@ export class RidesService {
   }
 
   async search(searchRideDto: SearchRideDto) {
+    this.logger.log(`Search parameters: ${JSON.stringify(searchRideDto, null, 2)}`);
+
     const { startLocation, endLocation, departureTime, passengers, dateRange = 2, maxDistance = 10, startCoords, endCoords } = searchRideDto;
 
-    // Геокодування адрес, якщо координати не надані
     const userStartCoords = startCoords || (await this.geocodeAddress(startLocation));
     const userEndCoords = endCoords || (await this.geocodeAddress(endLocation));
 
-    // Отримуємо всі активні поїздки
     const rides = await this.prisma.ride.findMany({
       where: {
         status: 'active',
-        availableSeats: { gte: passengers }, // Перевіряємо, чи є достатньо місць
+        availableSeats: { gte: passengers },
       },
       include: {
         driver: { select: { id: true, name: true, avatar: true, rating: true } },
       },
     });
 
-    // Фільтруємо поїздки
+    this.logger.log(`Found rides before filtering: ${JSON.stringify(rides, null, 2)}`);
+
     const filteredRides: FilteredRide[] = [];
     for (const ride of rides) {
-      // Перевіряємо діапазон дат
       const rideDate = new Date(ride.departureTime);
       const searchDate = new Date(departureTime);
       const dateDiff = Math.abs((rideDate.getTime() - searchDate.getTime()) / (1000 * 60 * 60 * 24));
-      if (dateDiff > dateRange) continue;
-
-      // Перевіряємо, чи є координати для поїздки
-      if (!ride.startCoordsLat || !ride.startCoordsLng || !ride.endCoordsLat || !ride.endCoordsLng) {
-        continue; // Пропускаємо поїздки без координат
+      if (dateDiff > dateRange) {
+        this.logger.log(`Ride ${ride.id} filtered out: date difference ${dateDiff} exceeds dateRange ${dateRange}`);
+        continue;
       }
 
-      // Обчислюємо відстані
+      if (!ride.startCoordsLat || !ride.startCoordsLng || !ride.endCoordsLat || !ride.endCoordsLng) {
+        this.logger.log(`Ride ${ride.id} filtered out: missing coordinates`);
+        continue;
+      }
+
       const rideStartCoords = { lat: ride.startCoordsLat, lng: ride.startCoordsLng };
       const rideEndCoords = { lat: ride.endCoordsLat, lng: ride.endCoordsLng };
       const startDistance = this.haversineDistance(userStartCoords, rideStartCoords);
       const endDistance = this.haversineDistance(userEndCoords, rideEndCoords);
 
-      // Фільтруємо за максимальною відстанню
+      this.logger.log(`Ride ${ride.id}: startDistance=${startDistance.toFixed(2)} km, endDistance=${endDistance.toFixed(2)} km`);
+
       if (startDistance <= maxDistance && endDistance <= maxDistance) {
         filteredRides.push({
           ...ride,
           startDistance,
           endDistance,
-          totalDistance: startDistance + endDistance, // Загальна релевантність маршруту
+          totalDistance: startDistance + endDistance,
         });
+      } else {
+        this.logger.log(`Ride ${ride.id} filtered out: startDistance=${startDistance.toFixed(2)} or endDistance=${endDistance.toFixed(2)} exceeds maxDistance ${maxDistance}`);
       }
     }
 
-    // Сортуємо за релевантністю (загальна відстань)
+    this.logger.log(`Filtered rides: ${JSON.stringify(filteredRides, null, 2)}`);
+
     filteredRides.sort((a, b) => a.totalDistance - b.totalDistance);
 
     return { success: true, rides: filteredRides };
