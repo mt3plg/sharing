@@ -12,6 +12,7 @@ import * as bcrypt from 'bcrypt';
 
 @Injectable()
 export class UsersService {
+    logger: any;
     constructor(
         private readonly prisma: PrismaService,
         private readonly authService: AuthService,
@@ -576,32 +577,32 @@ export class UsersService {
     async acceptBookingRequest(bookingRequestId: string, driverId: string) {
         const bookingRequest = await this.prisma.bookingRequest.findUnique({
             where: { id: bookingRequestId },
-            include: {
-                ride: true,
-            },
+            include: { ride: true },
         });
-
+    
         if (!bookingRequest) {
             throw new NotFoundException('Booking request not found');
         }
-
+    
         if (bookingRequest.ride.driverId !== driverId) {
             throw new UnauthorizedException('You are not authorized to accept this booking request');
         }
-
+    
         if (bookingRequest.status !== 'pending') {
             throw new BadRequestException('Booking request is not in pending state');
         }
-
+    
         if (bookingRequest.ride.availableSeats < 1) {
             throw new BadRequestException('No available seats left');
         }
-
+    
+        // Оновлюємо статус запиту на бронювання
         await this.prisma.bookingRequest.update({
             where: { id: bookingRequestId },
             data: { status: 'accepted' },
         });
-
+    
+        // Оновлюємо поїздку
         const updatedRide = await this.prisma.ride.update({
             where: { id: bookingRequest.rideId },
             data: {
@@ -610,7 +611,8 @@ export class UsersService {
                 status: 'booked',
             },
         });
-
+    
+        // Відхиляємо інші запити, якщо немає місць
         if (updatedRide.availableSeats === 0) {
             await this.prisma.bookingRequest.updateMany({
                 where: {
@@ -620,7 +622,31 @@ export class UsersService {
                 data: { status: 'rejected' },
             });
         }
-
+    
+        // Створюємо бесіду для пасажира (категорія "Drivers")
+        const passengerConversation = await this.prisma.conversation.create({
+            data: {
+                id: `conv-${bookingRequestId}-passenger`,
+                userId: bookingRequest.passengerId,
+                rideId: bookingRequest.rideId,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            },
+        });
+    
+        // Створюємо бесіду для водія (категорія "Passengers")
+        const driverConversation = await this.prisma.conversation.create({
+            data: {
+                id: `conv-${bookingRequestId}-driver`,
+                userId: driverId,
+                rideId: bookingRequest.rideId,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            },
+        });
+    
+        this.logger.log(`Created conversations: passenger=${passengerConversation.id}, driver=${driverConversation.id}`);
+    
         return { success: true };
     }
 
