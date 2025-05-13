@@ -1,7 +1,7 @@
 // src/users/users.service.ts
 import { Injectable, NotFoundException, BadRequestException, UnauthorizedException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import { CreateUserDto } from '../dto/create-user.dto';
+import { CreateUserDto } from '..//dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import { UpdateLocationDto } from '../dto/update-location.dto';
 import { CreateReviewDto } from '../dto/create-review.dto';
@@ -574,6 +574,7 @@ export class UsersService {
 
         const passenger = await this.prisma.user.findUnique({
             where: { id: passengerId },
+            select: { id: true, name: true, avatar: true, rating: true },
         });
 
         if (!passenger) {
@@ -606,7 +607,7 @@ export class UsersService {
                 status: 'pending',
             },
             include: {
-                passenger: { select: { id:Pulled from conversation context: id, name, avatar, rating } },
+                passenger: { select: { id: true, name: true, avatar: true, rating: true } },
             },
         });
 
