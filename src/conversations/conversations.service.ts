@@ -144,13 +144,13 @@ export class ConversationsService {
             },
         });
         this.logger.log('Conversations from DB:', conversations);
-
+    
         const formattedConversations = await Promise.all(
             conversations.map(async (conversation) => {
                 const isUserTheDriver = conversation.ride?.driverId === userId;
                 let contact;
                 let category;
-
+    
                 const areFriends = await this.prisma.friend.findFirst({
                     where: {
                         OR: [
@@ -159,7 +159,8 @@ export class ConversationsService {
                         ],
                     },
                 });
-
+    
+                // Пріоритет для категорії "Friends"
                 if (areFriends) {
                     category = 'Friends';
                     contact = conversation.userId === userId && conversation.ride ? conversation.ride.driver : conversation.user;
@@ -170,7 +171,7 @@ export class ConversationsService {
                     category = 'Drivers';
                     contact = conversation.ride?.driver;
                 }
-
+    
                 const unreadMessages = await this.prisma.message.count({
                     where: {
                         conversationId: conversation.id,
@@ -178,7 +179,7 @@ export class ConversationsService {
                         read: false,
                     },
                 });
-
+    
                 return {
                     id: conversation.id,
                     userId: conversation.userId,
@@ -197,7 +198,7 @@ export class ConversationsService {
                 };
             }),
         );
-
+    
         this.logger.log('Formatted conversations:', formattedConversations);
         return { success: true, conversations: formattedConversations };
     }
