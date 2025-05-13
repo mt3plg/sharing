@@ -104,7 +104,7 @@ export class UsersController {
         if (!file.filename) {
             throw new BadRequestException('File upload failed: filename is undefined');
         }
-        const avatarPath = `/Uploads/avatars/${file.filename}`;
+        const avatarPath = `/uploads/avatars/${file.filename}`;
         console.log('Saving avatar with path:', avatarPath);
         const updatedUser = await this.usersService.updateAvatar(req.user.id, avatarPath);
         return updatedUser;
