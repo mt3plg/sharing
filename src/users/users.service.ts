@@ -1,7 +1,6 @@
-// src/users/users.service.ts
 import { Injectable, NotFoundException, BadRequestException, UnauthorizedException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import { CreateUserDto } from '..//dto/create-user.dto';
+import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
 import { UpdateLocationDto } from '../dto/update-location.dto';
 import { CreateReviewDto } from '../dto/create-review.dto';
@@ -26,7 +25,7 @@ export class UsersService {
                 ...createUserDto,
                 password: hashedPassword,
                 status: 'pending',
-                verificationToken: createUserDto.verificationToken || null,
+                verificationToken: createUserDto.verificationToken ?? null,
             },
         });
     }
@@ -156,7 +155,7 @@ export class UsersService {
                 await unlink(filePath);
                 console.log(`Deleted old avatar: ${user.avatar}`);
             } catch (err: any) {
-                console.error(`Failed to delete old avatar: ${err.message || err}`);
+                console.error(`Failed to delete old avatar: ${err.message ?? err}`);
             }
         }
 
@@ -178,7 +177,7 @@ export class UsersService {
                 await unlink(filePath);
                 console.log(`Deleted avatar on user delete: ${user.avatar}`);
             } catch (err: any) {
-                console.error(`Failed to delete avatar on user delete: ${err.message || err}`);
+                console.error(`Failed to delete avatar on user delete: ${err.message ?? err}`);
             }
         }
         await this.prisma.user.delete({
@@ -222,7 +221,7 @@ export class UsersService {
                 id: user.id,
                 name: user.name,
                 avatar: user.avatar,
-                rating: user.rating || 0,
+                rating: user.rating ?? 0,
                 trips,
                 reviews: user.reviewsReceived.map(review => ({
                     id: review.id,
@@ -230,7 +229,7 @@ export class UsersService {
                         id: review.author.id,
                         name: review.author.name,
                         avatar: review.author.avatar,
-                        rating: review.author.rating || 0,
+                        rating: review.author.rating ?? 0,
                     },
                     rating: review.rating,
                     comment: review.comment,
@@ -317,7 +316,7 @@ export class UsersService {
                     id: review.author.id,
                     name: review.author.name,
                     avatar: review.author.avatar,
-                    rating: review.author.rating || 0,
+                    rating: review.author.rating ?? 0,
                 },
                 rating: review.rating,
                 comment: review.comment,
@@ -328,12 +327,12 @@ export class UsersService {
 
     async createFriendRequest(senderId: string, receiverId: string) {
         this.logger.log(`Attempting to create friend request: senderId=${senderId}, receiverId=${receiverId}`);
-    
+
         if (senderId === receiverId) {
             this.logger.warn('Sender and receiver are the same');
             throw new BadRequestException('Cannot send friend request to yourself');
         }
-    
+
         try {
             this.logger.log('Checking for existing friend request');
             const existingRequest = await this.prisma.friendRequest.findFirst({
@@ -343,12 +342,12 @@ export class UsersService {
                     status: 'pending',
                 },
             });
-    
+
             if (existingRequest) {
                 this.logger.warn('Friend request already exists');
                 throw new BadRequestException('Friend request already sent');
             }
-    
+
             this.logger.log('Checking if users are already friends');
             const areFriends = await this.prisma.friend.findFirst({
                 where: {
@@ -358,12 +357,12 @@ export class UsersService {
                     ],
                 },
             });
-    
+
             if (areFriends) {
                 this.logger.warn('Users are already friends');
                 throw new BadRequestException('Users are already friends');
             }
-    
+
             this.logger.log('Creating new friend request');
             const friendRequest = await this.prisma.friendRequest.create({
                 data: {
@@ -376,11 +375,10 @@ export class UsersService {
                     receiver: { select: { id: true, name: true, avatar: true } },
                 },
             });
-    
+
             this.logger.log(`Friend request created: ${senderId} -> ${receiverId}`);
             return { success: true, friendRequest };
         } catch (error: unknown) {
-            // Приведення типу error до Error
             const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
             const errorStack = error instanceof Error ? error.stack : undefined;
             this.logger.error(`Failed to create friend request: ${errorMessage}`, errorStack);
@@ -501,6 +499,50 @@ export class UsersService {
         throw new BadRequestException('Use friend request system to add friends');
     }
 
+    async removeFriend(userId: string, friendId: string) {
+        this.logger.log(`Attempting to remove friend: userId=${userId}, friendId=${friendId}`);
+
+        if (userId === friendId) {
+            this.logger.warn('Cannot remove yourself as a friend');
+            throw new BadRequestException('Cannot remove yourself as a friend');
+        }
+
+        try {
+            const existingFriendship = await this.prisma.friend.findFirst({
+                where: {
+                    OR: [
+                        { userId, friendId },
+                        { userId: friendId, friendId: userId },
+                    ],
+                },
+            });
+
+            if (!existingFriendship) {
+                this.logger.warn('Users are not friends');
+                throw new NotFoundException('Users are not friends');
+            }
+
+            await this.prisma.$transaction([
+                this.prisma.friend.deleteMany({
+                    where: {
+                        OR: [
+                            { userId, friendId },
+                            { userId: friendId, friendId: userId },
+                        ],
+                    },
+                }),
+            ]);
+
+            this.logger.log(`Friendship removed: ${userId} <-> ${friendId}`);
+            return { success: true };
+        } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+            const errorStack = error instanceof Error ? error.stack : undefined;
+            this.logger.error(`Failed to remove friend: ${errorMessage}`, errorStack);
+            throw new BadRequestException(`Failed to remove friend: ${errorMessage}`);
+        }
+    }
+
     async getUserReviews(userId: string) {
         const user = await this.prisma.user.findUnique({
             where: { id: userId },
@@ -521,7 +563,7 @@ export class UsersService {
                     id: review.author.id,
                     name: review.author.name,
                     avatar: review.author.avatar,
-                    rating: review.author.rating || 0,
+                    rating: review.author.rating ?? 0,
                 },
                 rating: review.rating,
                 comment: review.comment,
@@ -636,7 +678,7 @@ export class UsersService {
                     id: bookingRequest.passenger.id,
                     name: bookingRequest.passenger.name,
                     avatar: bookingRequest.passenger.avatar,
-                    rating: bookingRequest.passenger.rating || 0,
+                    rating: bookingRequest.passenger.rating ?? 0,
                 },
                 status: bookingRequest.status,
                 createdAt: bookingRequest.createdAt.toISOString(),
@@ -681,7 +723,7 @@ export class UsersService {
                     id: request.passenger.id,
                     name: request.passenger.name,
                     avatar: request.passenger.avatar,
-                    rating: request.passenger.rating || 0,
+                    rating: request.passenger.rating ?? 0,
                 },
                 requestStatus: request.status,
                 createdAt: request.createdAt.toISOString(),
@@ -700,13 +742,13 @@ export class UsersService {
                 id: request.ride.driver.id,
                 name: request.ride.driver.name,
                 avatar: request.ride.driver.avatar,
-                rating: request.ride.driver.rating || 0,
+                rating: request.ride.driver.rating ?? 0,
             },
             passenger: {
                 id: request.passenger.id,
                 name: request.passenger.name,
                 avatar: request.passenger.avatar,
-                rating: request.passenger.rating || 0,
+                rating: request.passenger.rating ?? 0,
             },
             requestStatus: request.status,
             createdAt: request.createdAt.toISOString(),
@@ -751,7 +793,7 @@ export class UsersService {
 
         const newStatus = newAvailableSeats === 0 ? 'booked' : 'active';
 
-        const updatedRide = await this.prisma.ride.update({
+        await this.prisma.ride.update({
             where: { id: bookingRequest.rideId },
             data: {
                 availableSeats: newAvailableSeats,
@@ -915,10 +957,10 @@ export class UsersService {
                     name: user.name,
                     email: user.email,
                     avatar: user.avatar,
-                    rating: user.rating || 0,
+                    rating: user.rating ?? 0,
                     category: userCategory,
-                    conversationId: conversation?.id || null,
-                    rideId: sharedRideAsDriver?.id || sharedRideAsPassenger?.id || null,
+                    conversationId: conversation?.id ?? null,
+                    rideId: sharedRideAsDriver?.id ?? sharedRideAsPassenger?.id ?? null,
                 };
             }),
         );

@@ -211,6 +211,21 @@ export class UsersController {
         return this.usersService.getFriends(user.id);
     }
 
+    @Delete('friends/:friendId')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({ summary: 'Видалити користувача з друзів' })
+    @ApiResponse({ status: 200, description: 'Дружбу успішно розірвано.' })
+    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
+    @ApiResponse({ status: 404, description: 'Користувачі не є друзями.' })
+    async removeFriend(
+        @Param('friendId') friendId: string,
+        @AuthUser() user: any,
+    ) {
+        return this.usersService.removeFriend(user.id, friendId);
+    }
+
     @Get('search')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
