@@ -6,11 +6,12 @@ import { AuthModule } from '../auth/auth.module';
 import { MulterModule } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
-import { ConversationsService } from '../conversations/conversations.service';
+import { ConversationsModule } from '../conversations/conversations.module'; // Додано імпорт
 
 @Module({
     imports: [
         AuthModule,
+        ConversationsModule, // Додано ConversationsModule
         MulterModule.register({
             storage: diskStorage({
                 destination: './Uploads/avatars',
@@ -33,7 +34,7 @@ import { ConversationsService } from '../conversations/conversations.service';
         }),
     ],
     controllers: [UsersController],
-    providers: [UsersService, PrismaService, ConversationsService],
+    providers: [UsersService, PrismaService],
     exports: [UsersService],
 })
 export class UsersModule {}

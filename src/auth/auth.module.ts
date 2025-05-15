@@ -1,28 +1,25 @@
 import { Module } from '@nestjs/common';
-import { PassportModule } from '@nestjs/passport';
-import { JwtModule } from '@nestjs/jwt';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
-import { UsersService } from '../users/users.service';
 import { PrismaService } from '../prisma.service';
+import { JwtModule } from '@nestjs/jwt';
+import { PassportModule } from '@nestjs/passport';
 import { JwtStrategy } from './jwt.strategy';
-import { EmailModule } from '../email/email.module';
-import { ConfigService } from '@nestjs/config';
+import { UsersModule } from '../users/users.module'; // Імпортуємо UsersModule
+import { ConversationsModule } from '../conversations/conversations.module'; // Імпортуємо ConversationsModule
 
 @Module({
     imports: [
+        UsersModule, // Додано UsersModule
+        ConversationsModule, // Додано ConversationsModule
         PassportModule.register({ defaultStrategy: 'jwt' }),
-        JwtModule.registerAsync({
-            useFactory: (configService: ConfigService) => ({
-                secret: configService.get<string>('JWT_SECRET'),
-                signOptions: { expiresIn: '1h' },
-            }),
-            inject: [ConfigService],
+        JwtModule.register({
+            secret: process.env.JWT_SECRET || 'yourSecretKey',
+            signOptions: { expiresIn: '1h' },
         }),
-        EmailModule,
     ],
     controllers: [AuthController],
-    providers: [AuthService, UsersService, PrismaService, JwtStrategy],
-    exports: [AuthService, JwtStrategy, PassportModule],
+    providers: [AuthService, PrismaService, JwtStrategy],
+    exports: [AuthService, JwtModule],
 })
 export class AuthModule {}
