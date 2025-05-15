@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
 import { PrismaService } from '../prisma.service';
@@ -6,12 +6,12 @@ import { AuthModule } from '../auth/auth.module';
 import { MulterModule } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
-import { ConversationsModule } from '../conversations/conversations.module'; // Додано імпорт
+import { ConversationsModule } from '../conversations/conversations.module';
 
 @Module({
     imports: [
-        AuthModule,
-        ConversationsModule, // Додано ConversationsModule
+        forwardRef(() => AuthModule), // Використовуємо forwardRef для AuthModule
+        ConversationsModule,
         MulterModule.register({
             storage: diskStorage({
                 destination: './Uploads/avatars',
