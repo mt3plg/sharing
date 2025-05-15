@@ -25,6 +25,12 @@ export class CreateRideDto {
   @IsString()
   @IsOptional()
   vehicleType?: string;
+
+  @ApiProperty({ example: 1, description: 'The number of passengers for booking', required: false })
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  passengerCount?: number;
 }
 
 export class SearchRideDto {
@@ -42,7 +48,7 @@ export class SearchRideDto {
   @IsDateString()
   departureTime!: string;
 
-  @ApiProperty({ example: 2, description: 'The number of passengers', required: false })
+  @ApiProperty({ example: 2, description: 'The number of passengers' })
   @IsInt()
   @Min(1)
   passengers!: number;
@@ -66,4 +72,16 @@ export class SearchRideDto {
   @ApiProperty({ example: { lat: 49.8397, lng: 24.0297 }, description: 'End coordinates', required: false })
   @IsOptional()
   endCoords?: { lat: number; lng: number };
+
+  @ApiProperty({ example: 10, description: 'Number of results to return', required: false })
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  limit?: number;
+
+  @ApiProperty({ example: 0, description: 'Number of results to skip (offset)', required: false })
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  offset?: number;
 }

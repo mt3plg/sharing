@@ -10,12 +10,11 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { RidesService } from './rides.service';
+import { RidesService, FilteredRide } from './rides.service';
 import { CreateRideDto, SearchRideDto } from './interfaces/interfaces_ride.interface';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser } from '../common/decorators/common_decorators_user.decorator';
-import { FilteredRide } from './rides.service'; 
 
 @ApiTags('rides')
 @Controller('rides')
@@ -29,6 +28,7 @@ export class RidesController {
   @ApiOperation({ summary: 'Create a new ride' })
   @ApiResponse({ status: 201, description: 'Ride created successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 400, description: 'Bad request' })
   async create(@Body() createRideDto: CreateRideDto, @AuthUser() user: any) {
     return this.ridesService.create(createRideDto, user.id);
   }
@@ -38,7 +38,7 @@ export class RidesController {
   @ApiOperation({ summary: 'Search for rides' })
   @ApiResponse({ status: 200, description: 'Rides found successfully' })
   @ApiResponse({ status: 400, description: 'Bad request' })
-  async search(@Body() searchRideDto: SearchRideDto): Promise<{ success: boolean; rides: FilteredRide[] }> {
+  async search(@Body() searchRideDto: SearchRideDto): Promise<{ success: boolean; rides: FilteredRide[]; total: number }> {
     return this.ridesService.search(searchRideDto);
   }
 
@@ -84,10 +84,11 @@ export class RidesController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Book a ride' })
-  @ApiResponse({ status: 200, description: 'Ride booked successfully' })
+  @ApiOperation({ summary: 'Request to book a ride' })
+  @ApiResponse({ status: 200, description: 'Booking request created successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Ride not found' })
+  @ApiResponse({ status: 400, description: 'Bad request' })
   async bookRide(
     @Param('id') id: string,
     @Body('passengerCount') passengerCount: number,
@@ -105,6 +106,7 @@ export class RidesController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Ride not found' })
+  @ApiResponse({ status: 400, description: 'Invalid status' })
   async updateStatus(
     @Param('id') id: string,
     @Body('status') status: string,
