@@ -7,11 +7,13 @@ import { PassportModule } from '@nestjs/passport';
 import { JwtStrategy } from './jwt.strategy';
 import { UsersModule } from '../users/users.module';
 import { ConversationsModule } from '../conversations/conversations.module';
+import { EmailModule } from '../email/email.module'; // Додано імпорт
 
 @Module({
     imports: [
-        forwardRef(() => UsersModule), // Використовуємо forwardRef для UsersModule
+        forwardRef(() => UsersModule),
         ConversationsModule,
+        EmailModule, // Додано EmailModule
         PassportModule.register({ defaultStrategy: 'jwt' }),
         JwtModule.register({
             secret: process.env.JWT_SECRET || 'yourSecretKey',
