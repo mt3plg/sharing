@@ -2,17 +2,18 @@ import { Module } from '@nestjs/common';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
 import { PrismaService } from '../prisma.service';
-import { AuthModule } from '../auth/auth.module'; // Імпортуємо AuthModule
+import { AuthModule } from '../auth/auth.module';
 import { MulterModule } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
+import { ConversationsService } from '../conversations/conversations.service';
 
 @Module({
     imports: [
-        AuthModule, // Додаємо AuthModule, щоб AuthService був доступний
+        AuthModule,
         MulterModule.register({
             storage: diskStorage({
-                destination: './uploads/avatars',
+                destination: './Uploads/avatars',
                 filename: (req, file, cb) => {
                     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
                     const ext = extname(file.originalname);
@@ -32,7 +33,7 @@ import { extname } from 'path';
         }),
     ],
     controllers: [UsersController],
-    providers: [UsersService, PrismaService],
+    providers: [UsersService, PrismaService, ConversationsService],
     exports: [UsersService],
 })
 export class UsersModule {}

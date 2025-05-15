@@ -27,14 +27,19 @@ export class ConversationsService {
             throw new NotFoundException('Ride not found');
         }
 
+        // Визначаємо категорію на основі ролі користувача
+        const isDriver = ride.driverId === userId;
+        const conversationId = `conv-${Date.now()}-${isDriver ? 'driver' : 'passenger'}`;
+
         const conversation = await this.prisma.conversation.create({
             data: {
+                id: conversationId,
                 userId: targetUserId,
-                rideId: rideId, // rideId гарантовано string
+                rideId: rideId,
             },
             include: {
                 user: { select: { id: true, name: true, avatar: true } },
-                ride: true,
+                ride: { select: { id: true, driverId: true } },
             },
         });
 
@@ -168,9 +173,16 @@ export class ConversationsService {
 
                 this.logger.log(`Conversation ${conversation.id}: userId=${userId}, targetUserId=${conversation.userId}, areFriends=${!!areFriends}`);
 
+                // Визначення категорії на основі conversationId
                 if (areFriends) {
                     category = 'Friends';
                     contact = conversation.userId === userId && conversation.ride ? conversation.ride.driver : conversation.user;
+                } else if (conversation.id.endsWith('-passenger')) {
+                    category = 'Passengers';
+                    contact = conversation.user;
+                } else if (conversation.id.endsWith('-driver')) {
+                    category = 'Drivers';
+                    contact = conversation.ride?.driver;
                 } else if (isUserTheDriver) {
                     category = 'Passengers';
                     contact = conversation.user;
@@ -179,7 +191,13 @@ export class ConversationsService {
                     contact = conversation.ride?.driver;
                 }
 
-                this.logger.log(`Conversation ${conversation.id}: category=${category}, contactId=${contact?.id}`);
+                // Пропускаємо бесіди без коректного контакту
+                if (!contact?.id) {
+                    this.logger.warn(`Skipping conversation ${conversation.id} with invalid contact`);
+                    return null;
+                }
+
+                this.logger.log(`Conversation ${conversation.id}: category=${category}, contactId=${contact.id}`);
 
                 const unreadMessages = await this.prisma.message.count({
                     where: {
@@ -208,7 +226,21 @@ export class ConversationsService {
             }),
         );
 
-        this.logger.log('Formatted conversations:', formattedConversations);
-        return { success: true, conversations: formattedConversations };
+        // Фільтруємо null значення
+        const validConversations = formattedConversations.filter(conv => conv !== null);
+        this.logger.log('Formatted conversations:', validConversations);
+        return { success: true, conversations: validConversations };
+    }
+
+    async getConversationsByCategory(userId: string, category: 'Friends' | 'Passengers' | 'Drivers') {
+        this.logger.log(`Fetching conversations for userId: ${userId}, category: ${category}`);
+        const conversations = await this.getConversations(userId);
+        if (!conversations.success) {
+            throw new BadRequestException('Failed to fetch conversations');
+        }
+
+        const filteredConversations = conversations.conversations.filter(conv => conv.category === category);
+        this.logger.log(`Filtered conversations for ${category}:`, filteredConversations);
+        return filteredConversations;
     }
 }

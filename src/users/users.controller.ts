@@ -217,8 +217,39 @@ export class UsersController {
     @ApiBearerAuth()
     @ApiOperation({ summary: 'Отримати друзів поточного користувача' })
     @ApiResponse({ status: 200, description: 'Повертає список друзів.' })
+    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
     async getFriends(@AuthUser() user: any) {
         return this.usersService.getFriends(user.id);
+    }
+
+    @Get('me/friends-list')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Отримати список друзів поточного користувача' })
+    @ApiResponse({ status: 200, description: 'Повертає список друзів користувача.' })
+    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
+    async getFriendsList(@AuthUser() user: any) {
+        return this.usersService.getFriendsList(user.id);
+    }
+
+    @Get('me/passengers')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Отримати список пасажирів, з якими користувач їздив як водій' })
+    @ApiResponse({ status: 200, description: 'Повертає список пасажирів.' })
+    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
+    async getPassengers(@AuthUser() user: any) {
+        return this.usersService.getPassengers(user.id);
+    }
+
+    @Get('me/drivers')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Отримати список водіїв, з якими користувач їздив як пасажир' })
+    @ApiResponse({ status: 200, description: 'Повертає список водіїв.' })
+    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
+    async getDrivers(@AuthUser() user: any) {
+        return this.usersService.getDrivers(user.id);
     }
 
     @Delete('friends/:friendId')

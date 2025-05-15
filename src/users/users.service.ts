@@ -9,6 +9,7 @@ import { join } from 'path';
 import { unlink } from 'fs/promises';
 import { AuthService } from '../auth/auth.service';
 import * as bcrypt from 'bcrypt';
+import { ConversationsService } from '../conversations/conversations.service';
 
 @Injectable()
 export class UsersService {
@@ -16,6 +17,7 @@ export class UsersService {
     constructor(
         private readonly prisma: PrismaService,
         private readonly authService: AuthService,
+        private readonly conversationsService: ConversationsService,
     ) {}
 
     async create(createUserDto: CreateUserDto): Promise<UserEntity> {
@@ -998,5 +1000,91 @@ export class UsersService {
         ];
 
         return { success: true, friends };
+    }
+
+    async getFriendsList(userId: string) {
+        this.logger.log(`Fetching friends list for userId: ${userId}`);
+        const conversations = await this.conversationsService.getConversationsByCategory(userId, 'Friends');
+        const friends = conversations.map(conv => ({
+            id: conv.contact.id,
+            name: conv.contact.name,
+            avatar: conv.contact.avatar,
+            conversationId: conv.id,
+            lastMessage: conv.lastMessage ? {
+                text: conv.lastMessage.text,
+                timestamp: conv.lastMessage.timestamp,
+            } : null,
+            unreadMessages: conv.unreadMessages,
+        }));
+
+        // Унікалізуємо друзів за id
+        const uniqueFriendsMap = new Map<string, typeof friends[0]>();
+        friends.forEach(friend => {
+            if (!uniqueFriendsMap.has(friend.id)) {
+                uniqueFriendsMap.set(friend.id, friend);
+            }
+        });
+
+        const uniqueFriends = Array.from(uniqueFriendsMap.values());
+        this.logger.log(`Friends list for user ${userId}:`, uniqueFriends);
+        return { success: true, friends: uniqueFriends };
+    }
+
+    async getPassengers(userId: string) {
+        this.logger.log(`Fetching passengers for userId: ${userId}`);
+        const conversations = await this.conversationsService.getConversationsByCategory(userId, 'Passengers');
+        const passengers = conversations.map(conv => ({
+            id: conv.contact.id,
+            name: conv.contact.name,
+            avatar: conv.contact.avatar,
+            conversationId: conv.id,
+            rideId: conv.rideId,
+            lastMessage: conv.lastMessage ? {
+                text: conv.lastMessage.text,
+                timestamp: conv.lastMessage.timestamp,
+            } : null,
+            unreadMessages: conv.unreadMessages,
+        }));
+
+        // Унікалізуємо пасажирів за id
+        const uniquePassengersMap = new Map<string, typeof passengers[0]>();
+        passengers.forEach(passenger => {
+            if (!uniquePassengersMap.has(passenger.id)) {
+                uniquePassengersMap.set(passenger.id, passenger);
+            }
+        });
+
+        const uniquePassengers = Array.from(uniquePassengersMap.values());
+        this.logger.log(`Passengers for user ${userId}:`, uniquePassengers);
+        return { success: true, passengers: uniquePassengers };
+    }
+
+    async getDrivers(userId: string) {
+        this.logger.log(`Fetching drivers for userId: ${userId}`);
+        const conversations = await this.conversationsService.getConversationsByCategory(userId, 'Drivers');
+        const drivers = conversations.map(conv => ({
+            id: conv.contact.id,
+            name: conv.contact.name,
+            avatar: conv.contact.avatar,
+            conversationId: conv.id,
+            rideId: conv.rideId,
+            lastMessage: conv.lastMessage ? {
+                text: conv.lastMessage.text,
+                timestamp: conv.lastMessage.timestamp,
+            } : null,
+            unreadMessages: conv.unreadMessages,
+        }));
+
+        // Унікалізуємо водіїв за id
+        const uniqueDriversMap = new Map<string, typeof drivers[0]>();
+        drivers.forEach(driver => {
+            if (!uniqueDriversMap.has(driver.id)) {
+                uniqueDriversMap.set(driver.id, driver);
+            }
+        });
+
+        const uniqueDrivers = Array.from(uniqueDriversMap.values());
+        this.logger.log(`Drivers for user ${userId}:`, uniqueDrivers);
+        return { success: true, drivers: uniqueDrivers };
     }
 }
