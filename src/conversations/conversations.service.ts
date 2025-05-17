@@ -19,7 +19,10 @@ export class ConversationsService {
             throw new BadRequestException('rideId is required');
         }
 
-        const ride = await this.prisma.ride.findUnique({ where: { id: rideId } });
+        const ride = await this.prisma.ride.findUnique({ 
+            where: { id: rideId },
+            include: { driver: true, passenger: true }
+        });
         if (!ride) {
             this.logger.error('Ride not found:', rideId);
             throw new NotFoundException('Ride not found');
@@ -45,7 +48,14 @@ export class ConversationsService {
             },
             include: {
                 user: { select: { id: true, name: true, avatar: true } },
-                ride: { select: { id: true, driverId: true } },
+                ride: { 
+                    select: { 
+                        id: true, 
+                        driverId: true,
+                        driver: { select: { id: true, name: true, avatar: true } },
+                        passenger: { select: { id: true, name: true, avatar: true } }
+                    } 
+                },
             },
         });
 
@@ -180,19 +190,16 @@ export class ConversationsService {
 
                 if (areFriends) {
                     category = 'Friends';
-                    contact = conversation.userId === userId && conversation.ride ? conversation.ride.driver : conversation.user;
+                    contact = conversation.user;
                 } else if (conversation.id.includes('-passenger-')) {
                     category = 'Passengers';
-                    contact = conversation.user;
+                    contact = conversation.user; // For driver, passenger is contact
                 } else if (conversation.id.includes('-driver-')) {
                     category = 'Drivers';
-                    contact = conversation.ride?.driver;
-                } else if (isUserTheDriver) {
-                    category = 'Passengers';
-                    contact = conversation.user;
+                    contact = conversation.ride?.driver; // For passenger, driver is contact
                 } else {
-                    category = 'Drivers';
-                    contact = conversation.ride?.driver;
+                    category = isUserTheDriver ? 'Passengers' : 'Drivers';
+                    contact = isUserTheDriver ? conversation.user : conversation.ride?.driver;
                 }
 
                 if (!contact?.id) {
@@ -200,7 +207,7 @@ export class ConversationsService {
                     return null;
                 }
 
-                this.logger.log(`Conversation ${conversation.id}: category=${category}, contactId=${contact.id}`);
+                this.logger.log(`Conversation ${conversation.id}: category=${category}, contactId=${contact.id}, contactName=${contact.name}`);
 
                 const unreadMessages = await this.prisma.message.count({
                     where: {
@@ -216,7 +223,11 @@ export class ConversationsService {
                     rideId: conversation.rideId,
                     createdAt: conversation.createdAt,
                     updatedAt: conversation.updatedAt,
-                    contact,
+                    contact: {
+                        id: contact.id,
+                        name: contact.name,
+                        avatar: contact.avatar,
+                    },
                     category,
                     lastMessage: conversation.messages[0]
                         ? {

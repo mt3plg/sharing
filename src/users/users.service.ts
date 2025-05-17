@@ -767,7 +767,7 @@ export class UsersService {
     async acceptBookingRequest(bookingRequestId: string, driverId: string) {
         const bookingRequest = await this.prisma.bookingRequest.findUnique({
             where: { id: bookingRequestId },
-            include: { ride: true },
+            include: { ride: { include: { driver: true, passenger: true } } },
         });
 
         if (!bookingRequest) {
@@ -792,7 +792,6 @@ export class UsersService {
         });
 
         const newAvailableSeats = bookingRequest.ride.availableSeats - 1;
-
         const newStatus = newAvailableSeats === 0 ? 'booked' : 'active';
 
         await this.prisma.ride.update({
@@ -814,22 +813,22 @@ export class UsersService {
             });
         }
 
-        // Create conversation for passenger with driver
+        // Create conversation for passenger (contact is driver)
         const passengerConversation = await this.conversationsService.create(
             {
                 rideId: bookingRequest.rideId,
-                userId: driverId, // Driver as the contact for passenger
+                userId: driverId, // Driver as contact
             },
-            bookingRequest.passengerId // Passenger initiates the conversation
+            bookingRequest.passengerId // Passenger initiates
         );
 
-        // Create conversation for driver with passenger
+        // Create conversation for driver (contact is passenger)
         const driverConversation = await this.conversationsService.create(
             {
                 rideId: bookingRequest.rideId,
-                userId: bookingRequest.passengerId, // Passenger as the contact for driver
+                userId: bookingRequest.passengerId, // Passenger as contact
             },
-            driverId // Driver initiates the conversation
+            driverId // Driver initiates
         );
 
         this.logger.log(`Created conversations: passenger=${passengerConversation.conversationId}, driver=${driverConversation.conversationId}, rideStatus=${newStatus}, availableSeats=${newAvailableSeats}`);
