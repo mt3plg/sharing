@@ -19,12 +19,13 @@ export class EmailService {
 
     async sendVerificationEmail(email: string, token: string): Promise<void> {
         try {
-            await this.oAuth2Client.getAccessToken();
+            const accessToken = await this.oAuth2Client.getAccessToken();
+            console.log('Access token:', accessToken);
             const gmail = google.gmail({
                 version: 'v1',
                 auth: this.oAuth2Client,
             });
-
+    
             const message = [
                 `From: ${process.env.GOOGLE_EMAIL}`,
                 `To: ${email}`,
@@ -32,23 +33,23 @@ export class EmailService {
                 '',
                 `Your verification code is: ${token}`,
             ].join('\n');
-
+    
             const encodedMessage = Buffer.from(message)
                 .toString('base64')
                 .replace(/\+/g, '-')
                 .replace(/\//g, '_')
                 .replace(/=+$/, '');
-
+    
             await gmail.users.messages.send({
                 userId: 'me',
                 requestBody: {
                     raw: encodedMessage,
                 },
             });
-
+    
             console.log(`Verification email sent to ${email}`);
         } catch (error: any) {
-            console.error('Error sending email via Gmail API:', error.message || error);
+            console.error('Error sending email via Gmail API:', error.message, error);
             throw new Error('Failed to send verification email');
         }
     }
