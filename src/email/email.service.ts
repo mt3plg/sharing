@@ -9,7 +9,7 @@ export class EmailService {
         this.oAuth2Client = new google.auth.OAuth2(
             process.env.GOOGLE_CLIENT_ID,
             process.env.GOOGLE_CLIENT_SECRET,
-            'http://localhost:3000/auth/callback',
+            'https://sharing-67g1.onrender.com/auth/callback',
         );
 
         this.oAuth2Client.setCredentials({
