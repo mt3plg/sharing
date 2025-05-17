@@ -814,27 +814,25 @@ export class UsersService {
             });
         }
 
-        const passengerConversation = await this.prisma.conversation.create({
-            data: {
-                id: `conv-${bookingRequestId}-passenger`,
-                userId: bookingRequest.passengerId,
+        // Create conversation for passenger with driver
+        const passengerConversation = await this.conversationsService.create(
+            {
                 rideId: bookingRequest.rideId,
-                createdAt: new Date(),
-                updatedAt: new Date(),
+                userId: driverId, // Driver as the contact for passenger
             },
-        });
+            bookingRequest.passengerId // Passenger initiates the conversation
+        );
 
-        const driverConversation = await this.prisma.conversation.create({
-            data: {
-                id: `conv-${bookingRequestId}-driver`,
-                userId: driverId,
+        // Create conversation for driver with passenger
+        const driverConversation = await this.conversationsService.create(
+            {
                 rideId: bookingRequest.rideId,
-                createdAt: new Date(),
-                updatedAt: new Date(),
+                userId: bookingRequest.passengerId, // Passenger as the contact for driver
             },
-        });
+            driverId // Driver initiates the conversation
+        );
 
-        this.logger.log(`Created conversations: passenger=${passengerConversation.id}, driver=${driverConversation.id}, rideStatus=${newStatus}, availableSeats=${newAvailableSeats}`);
+        this.logger.log(`Created conversations: passenger=${passengerConversation.conversationId}, driver=${driverConversation.conversationId}, rideStatus=${newStatus}, availableSeats=${newAvailableSeats}`);
 
         return { success: true };
     }

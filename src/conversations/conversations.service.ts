@@ -14,22 +14,28 @@ export class ConversationsService {
 
         this.logger.log(`Creating conversation for userId: ${userId}, targetUserId: ${targetUserId}, rideId: ${rideId}`);
         
-        // Перевіряємо, чи передано rideId, оскільки воно обов'язкове в схемі Prisma
         if (!rideId) {
             this.logger.error('rideId is required to create a conversation');
             throw new BadRequestException('rideId is required');
         }
 
-        // Перевіряємо існування поїздки
         const ride = await this.prisma.ride.findUnique({ where: { id: rideId } });
         if (!ride) {
             this.logger.error('Ride not found:', rideId);
             throw new NotFoundException('Ride not found');
         }
 
-        // Визначаємо категорію на основі ролі користувача
         const isDriver = ride.driverId === userId;
-        const conversationId = `conv-${Date.now()}-${isDriver ? 'driver' : 'passenger'}`;
+        const conversationId = `conv-${rideId}-${isDriver ? 'driver-' + targetUserId : 'passenger-' + userId}`;
+
+        const existingConversation = await this.prisma.conversation.findUnique({
+            where: { id: conversationId },
+        });
+
+        if (existingConversation) {
+            this.logger.log(`Conversation already exists: ${conversationId}`);
+            return { success: true, conversationId: existingConversation.id };
+        }
 
         const conversation = await this.prisma.conversation.create({
             data: {
@@ -161,7 +167,6 @@ export class ConversationsService {
                 let contact;
                 let category;
 
-                // Перевірка дружби
                 const areFriends = await this.prisma.friend.findFirst({
                     where: {
                         OR: [
@@ -173,14 +178,13 @@ export class ConversationsService {
 
                 this.logger.log(`Conversation ${conversation.id}: userId=${userId}, targetUserId=${conversation.userId}, areFriends=${!!areFriends}`);
 
-                // Визначення категорії на основі conversationId
                 if (areFriends) {
                     category = 'Friends';
                     contact = conversation.userId === userId && conversation.ride ? conversation.ride.driver : conversation.user;
-                } else if (conversation.id.endsWith('-passenger')) {
+                } else if (conversation.id.includes('-passenger-')) {
                     category = 'Passengers';
                     contact = conversation.user;
-                } else if (conversation.id.endsWith('-driver')) {
+                } else if (conversation.id.includes('-driver-')) {
                     category = 'Drivers';
                     contact = conversation.ride?.driver;
                 } else if (isUserTheDriver) {
@@ -191,7 +195,6 @@ export class ConversationsService {
                     contact = conversation.ride?.driver;
                 }
 
-                // Пропускаємо бесіди без коректного контакту
                 if (!contact?.id) {
                     this.logger.warn(`Skipping conversation ${conversation.id} with invalid contact`);
                     return null;
@@ -226,7 +229,6 @@ export class ConversationsService {
             }),
         );
 
-        // Фільтруємо null значення
         const validConversations = formattedConversations.filter(conv => conv !== null);
         this.logger.log('Formatted conversations:', validConversations);
         return { success: true, conversations: validConversations };
