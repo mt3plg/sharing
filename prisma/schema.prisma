@@ -1,4 +1,3 @@
-// prisma/schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
@@ -28,6 +27,7 @@ model User {
   driverRides            Ride[]           @relation("DriverRides")
   passengerRides         Ride[]           @relation("PassengerRides")
   conversations          Conversation[]   @relation("UserConversations")
+  targetConversations    Conversation[]   @relation("TargetUser") // Додано зворотне відношення
   messages               Message[]        @relation("UserMessages")
   reviewsReceived        Review[]         @relation("UserReviews")
   reviewsGiven           Review[]         @relation("AuthorReviews")
@@ -61,14 +61,17 @@ model Ride {
 }
 
 model Conversation {
-  id        String    @id @default(uuid())
-  userId    String
-  user      User      @relation("UserConversations", fields: [userId], references: [id])
-  rideId    String? // Зроблено необов’язковим
-  ride      Ride?     @relation("RideConversations", fields: [rideId], references: [id])
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  messages  Message[] @relation("ConversationMessages")
+  id           String    @id @default(uuid())
+  userId       String
+  user         User      @relation("UserConversations", fields: [userId], references: [id])
+  rideId       String?
+  ride         Ride?     @relation("RideConversations", fields: [rideId], references: [id])
+  targetUserId String
+  targetUser   User      @relation("TargetUser", fields: [targetUserId], references: [id])
+  category     String // "Passengers", "Drivers", "Friends"
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  messages     Message[] @relation("ConversationMessages")
 }
 
 model Message {
