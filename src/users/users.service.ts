@@ -847,28 +847,18 @@ export class UsersService {
             });
         }
 
-        // Створюємо розмову для водія (контакт — пасажир)
-        const driverConversation = await this.conversationsService.create(
+        // Створюємо одну розмову для поїздки з категорією "Ride"
+        const conversation = await this.conversationsService.create(
             {
                 rideId: bookingRequest.rideId,
                 userId: bookingRequest.passengerId, // Пасажир як контакт
             },
             driverId, // Водій ініціатор
-            'Passengers',
-        );
-
-        // Створюємо розмову для пасажира (контакт — водій)
-        const passengerConversation = await this.conversationsService.create(
-            {
-                rideId: bookingRequest.rideId,
-                userId: driverId, // Водій як контакт
-            },
-            bookingRequest.passengerId, // Пасажир ініціатор
-            'Drivers',
+            'Ride', // Нейтральна категорія
         );
 
         this.logger.log(
-            `Created conversations: passenger=${passengerConversation.conversationId}, driver=${driverConversation.conversationId}, rideStatus=${newStatus}, availableSeats=${newAvailableSeats}`,
+            `Created conversation: ${conversation.conversationId}, rideStatus=${newStatus}, availableSeats=${newAvailableSeats}`,
         );
 
         return { success: true };
@@ -1076,21 +1066,26 @@ export class UsersService {
 
     async getPassengers(userId: string) {
         this.logger.log(`Fetching passengers for userId: ${userId}`);
-        const conversations = await this.conversationsService.getConversationsByCategory(userId, 'Passengers');
-        const passengers = conversations.map((conv) => ({
-            id: conv.contact.id,
-            name: conv.contact.name,
-            avatar: conv.contact.avatar,
-            conversationId: conv.id,
-            rideId: conv.rideId,
-            lastMessage: conv.lastMessage
-                ? {
-                      text: conv.lastMessage.text,
-                      timestamp: conv.lastMessage.timestamp,
-                  }
-                : null,
-            unreadMessages: conv.unreadMessages,
-        }));
+        const conversations = await this.conversationsService.getConversationsByCategory(userId, 'Ride');
+        const passengers = conversations
+            .filter((conv) => {
+                // Водій бачить пасажирів у розмовах, де він driverId
+                return conv.ride && conv.ride.driverId === userId;
+            })
+            .map((conv) => ({
+                id: conv.contact.id,
+                name: conv.contact.name,
+                avatar: conv.contact.avatar,
+                conversationId: conv.id,
+                rideId: conv.rideId,
+                lastMessage: conv.lastMessage
+                    ? {
+                          text: conv.lastMessage.text,
+                          timestamp: conv.lastMessage.timestamp,
+                      }
+                    : null,
+                unreadMessages: conv.unreadMessages,
+            }));
 
         const uniquePassengersMap = new Map<string, typeof passengers[0]>();
         passengers.forEach((passenger) => {
@@ -1106,21 +1101,26 @@ export class UsersService {
 
     async getDrivers(userId: string) {
         this.logger.log(`Fetching drivers for userId: ${userId}`);
-        const conversations = await this.conversationsService.getConversationsByCategory(userId, 'Drivers');
-        const drivers = conversations.map((conv) => ({
-            id: conv.contact.id,
-            name: conv.contact.name,
-            avatar: conv.contact.avatar,
-            conversationId: conv.id,
-            rideId: conv.rideId,
-            lastMessage: conv.lastMessage
-                ? {
-                      text: conv.lastMessage.text,
-                      timestamp: conv.lastMessage.timestamp,
-                  }
-                : null,
-            unreadMessages: conv.unreadMessages,
-        }));
+        const conversations = await this.conversationsService.getConversationsByCategory(userId, 'Ride');
+        const drivers = conversations
+            .filter((conv) => {
+                // Пасажир бачить водіїв у розмовах, де він passengerId
+                return conv.ride && conv.ride.passengerId === userId;
+            })
+            .map((conv) => ({
+                id: conv.contact.id,
+                name: conv.contact.name,
+                avatar: conv.contact.avatar,
+                conversationId: conv.id,
+                rideId: conv.rideId,
+                lastMessage: conv.lastMessage
+                    ? {
+                          text: conv.lastMessage.text,
+                          timestamp: conv.lastMessage.timestamp,
+                      }
+                    : null,
+                unreadMessages: conv.unreadMessages,
+            }));
 
         const uniqueDriversMap = new Map<string, typeof drivers[0]>();
         drivers.forEach((driver) => {

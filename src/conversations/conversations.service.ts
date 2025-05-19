@@ -17,7 +17,7 @@ export class ConversationsService {
     async create(
         createConversationDto: CreateConversationDto,
         initiatorId: string,
-        category: 'Passengers' | 'Drivers' | 'Friends',
+        category: 'Ride' | 'Friends',
     ) {
         const { rideId, userId: targetUserId } = createConversationDto;
 
@@ -232,6 +232,7 @@ export class ConversationsService {
                           }
                         : null,
                     unreadMessages,
+                    ride: conversation.ride,
                 };
             }),
         );
@@ -243,7 +244,7 @@ export class ConversationsService {
 
     async getConversationsByCategory(
         userId: string,
-        category: 'Friends' | 'Passengers' | 'Drivers',
+        category: 'Ride' | 'Friends',
     ) {
         this.logger.log(`Fetching conversations for userId: ${userId}, category: ${category}`);
         const conversations = await this.getConversations(userId);
