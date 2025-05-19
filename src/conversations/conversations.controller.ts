@@ -1,4 +1,3 @@
-// src/conversations/conversations.controller.ts
 import {
     Controller,
     Post,
@@ -27,48 +26,45 @@ export class ConversationsController {
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @HttpCode(HttpStatus.CREATED)
-    @ApiOperation({ summary: 'Create a new conversation' })
-    @ApiResponse({ status: 201, description: 'Conversation created successfully' })
-    @ApiResponse({ status: 401, description: 'Unauthorized' })
-    @ApiResponse({ status: 404, description: 'Ride not found' })
-    async create(
-        @Body() createConversationDto: CreateConversationDto,
-        @AuthUser() user: any,
-    ) {
+    @ApiOperation({ summary: 'Створити нову розмову' })
+    @ApiResponse({ status: 201, description: 'Розмова успішно створена' })
+    @ApiResponse({ status: 401, description: 'Неавторизовано' })
+    @ApiResponse({ status: 404, description: 'Поїздку не знайдено' })
+    async create(@Body() createConversationDto: CreateConversationDto, @AuthUser() user: any) {
         this.logger.log(`Creating conversation for user ${user.id}: ${JSON.stringify(createConversationDto)}`);
-        return this.conversationsService.create(createConversationDto, user.id);
+        // Визначаємо категорію залежно від контексту
+        const category = createConversationDto.rideId ? 'Passengers' : 'Friends';
+        return this.conversationsService.create(createConversationDto, user.id, category);
     }
 
     @Post(':id/messages')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @HttpCode(HttpStatus.CREATED)
-    @ApiOperation({ summary: 'Send a message in a conversation' })
-    @ApiResponse({ status: 201, description: 'Message sent successfully' })
-    @ApiResponse({ status: 401, description: 'Unauthorized' })
-    @ApiResponse({ status: 403, description: 'Forbidden' })
-    @ApiResponse({ status: 404, description: 'Conversation not found' })
+    @ApiOperation({ summary: 'Надіслати повідомлення в розмові' })
+    @ApiResponse({ status: 201, description: 'Повідомлення успішно надіслано' })
+    @ApiResponse({ status: 401, description: 'Неавторизовано' })
+    @ApiResponse({ status: 403, description: 'Заборонено' })
+    @ApiResponse({ status: 404, description: 'Розмову не знайдено' })
     async sendMessage(
         @Param('id') conversationId: string,
         @Body() createMessageDto: CreateMessageDto,
         @AuthUser() user: any,
     ) {
-        this.logger.log(`Sending message to conversation ${conversationId} by user ${user.id}: ${JSON.stringify(createMessageDto)}`);
-        return this.conversationsService.sendMessage(
-            conversationId,
-            createMessageDto,
-            user.id,
+        this.logger.log(
+            `Sending message to conversation ${conversationId} by user ${user.id}: ${JSON.stringify(createMessageDto)}`,
         );
+        return this.conversationsService.sendMessage(conversationId, createMessageDto, user.id);
     }
 
     @Get(':id/messages')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
-    @ApiOperation({ summary: 'Get messages in a conversation' })
-    @ApiResponse({ status: 200, description: 'Messages retrieved successfully' })
-    @ApiResponse({ status: 401, description: 'Unauthorized' })
-    @ApiResponse({ status: 403, description: 'Forbidden' })
-    @ApiResponse({ status: 404, description: 'Conversation not found' })
+    @ApiOperation({ summary: 'Отримати повідомлення в розмові' })
+    @ApiResponse({ status: 200, description: 'Повідомлення успішно отримано' })
+    @ApiResponse({ status: 401, description: 'Неавторизовано' })
+    @ApiResponse({ status: 403, description: 'Заборонено' })
+    @ApiResponse({ status: 404, description: 'Розмову не знайдено' })
     async getMessages(@Param('id') conversationId: string, @AuthUser() user: any) {
         this.logger.log(`Fetching messages for conversation ${conversationId} by user ${user.id}`);
         return this.conversationsService.getMessages(conversationId, user.id);
@@ -77,9 +73,9 @@ export class ConversationsController {
     @Get()
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
-    @ApiOperation({ summary: 'Get all conversations for the user' })
-    @ApiResponse({ status: 200, description: 'Conversations retrieved successfully' })
-    @ApiResponse({ status: 401, description: 'Unauthorized' })
+    @ApiOperation({ summary: 'Отримати всі розмови користувача' })
+    @ApiResponse({ status: 200, description: 'Розмови успішно отримано' })
+    @ApiResponse({ status: 401, description: 'Неавторизовано' })
     async getConversations(@AuthUser() user: any) {
         this.logger.log(`Fetching conversations for user ${user.id}`);
         return this.conversationsService.getConversations(user.id);

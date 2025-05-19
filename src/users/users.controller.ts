@@ -167,10 +167,7 @@ export class UsersController {
     @ApiOperation({ summary: 'Надіслати запит на дружбу' })
     @ApiResponse({ status: 201, description: 'Запит на дружбу успішно надіслано.' })
     @ApiResponse({ status: 401, description: 'Неавторизовано.' })
-    async sendFriendRequest(
-        @AuthUser() user: any,
-        @Body('receiverId') receiverId: string,
-    ) {
+    async sendFriendRequest(@AuthUser() user: any, @Body('receiverId') receiverId: string) {
         return this.usersService.createFriendRequest(user.id, receiverId);
     }
 
@@ -191,10 +188,7 @@ export class UsersController {
     @ApiOperation({ summary: 'Прийняти запит на дружбу' })
     @ApiResponse({ status: 200, description: 'Запит на дружбу прийнято.' })
     @ApiResponse({ status: 401, description: 'Неавторизовано.' })
-    async acceptFriendRequest(
-        @Param('id') requestId: string,
-        @AuthUser() user: any,
-    ) {
+    async acceptFriendRequest(@Param('id') requestId: string, @AuthUser() user: any) {
         return this.usersService.acceptFriendRequest(requestId, user.id);
     }
 
@@ -205,10 +199,7 @@ export class UsersController {
     @ApiOperation({ summary: 'Відхилити запит на дружбу' })
     @ApiResponse({ status: 200, description: 'Запит на дружбу відхилено.' })
     @ApiResponse({ status: 401, description: 'Неавторизовано.' })
-    async rejectFriendRequest(
-        @Param('id') requestId: string,
-        @AuthUser() user: any,
-    ) {
+    async rejectFriendRequest(@Param('id') requestId: string, @AuthUser() user: any) {
         return this.usersService.rejectFriendRequest(requestId, user.id);
     }
 
@@ -260,10 +251,7 @@ export class UsersController {
     @ApiResponse({ status: 200, description: 'Дружбу успішно розірвано.' })
     @ApiResponse({ status: 401, description: 'Неавторизовано.' })
     @ApiResponse({ status: 404, description: 'Користувачі не є друзями.' })
-    async removeFriend(
-        @Param('friendId') friendId: string,
-        @AuthUser() user: any,
-    ) {
+    async removeFriend(@Param('friendId') friendId: string, @AuthUser() user: any) {
         return this.usersService.removeFriend(user.id, friendId);
     }
 
@@ -273,10 +261,7 @@ export class UsersController {
     @ApiOperation({ summary: 'Пошук користувачів за ім’ям або email з пагінацією та фільтром за категорією' })
     @ApiResponse({ status: 200, description: 'Повертає список користувачів.' })
     @ApiResponse({ status: 401, description: 'Неавторизовано.' })
-    async searchUsers(
-        @Query() queryDto: SearchUsersQueryDto,
-        @AuthUser() user: any,
-    ) {
+    async searchUsers(@Query() queryDto: SearchUsersQueryDto, @AuthUser() user: any) {
         return this.usersService.searchUsers(
             queryDto.query,
             user.id,
@@ -293,10 +278,7 @@ export class UsersController {
     @ApiOperation({ summary: 'Створити запит на бронювання' })
     @ApiResponse({ status: 201, description: 'Запит на бронювання успішно створено.' })
     @ApiResponse({ status: 401, description: 'Неавторизовано.' })
-    async createBookingRequest(
-        @Body('rideId') rideId: string,
-        @AuthUser() user: any,
-    ) {
+    async createBookingRequest(@Body('rideId') rideId: string, @AuthUser() user: any) {
         return this.usersService.createBookingRequest(rideId, user.id);
     }
 
@@ -317,10 +299,7 @@ export class UsersController {
     @ApiOperation({ summary: 'Прийняти запит на бронювання' })
     @ApiResponse({ status: 200, description: 'Запит на бронювання прийнято.' })
     @ApiResponse({ status: 401, description: 'Неавторизовано.' })
-    async acceptBookingRequest(
-        @Param('id') bookingRequestId: string,
-        @AuthUser() user: any,
-    ) {
+    async acceptBookingRequest(@Param('id') bookingRequestId: string, @AuthUser() user: any) {
         return this.usersService.acceptBookingRequest(bookingRequestId, user.id);
     }
 
@@ -331,10 +310,7 @@ export class UsersController {
     @ApiOperation({ summary: 'Відхилити запит на бронювання' })
     @ApiResponse({ status: 200, description: 'Запит на бронювання відхилено.' })
     @ApiResponse({ status: 401, description: 'Неавторизовано.' })
-    async rejectBookingRequest(
-        @Param('id') bookingRequestId: string,
-        @AuthUser() user: any,
-    ) {
+    async rejectBookingRequest(@Param('id') bookingRequestId: string, @AuthUser() user: any) {
         return this.usersService.rejectBookingRequest(bookingRequestId, user.id);
     }
 }

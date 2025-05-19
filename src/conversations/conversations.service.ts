@@ -1,7 +1,12 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import {
+    Injectable,
+    NotFoundException,
+    ForbiddenException,
+    BadRequestException,
+    Logger,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CreateConversationDto, CreateMessageDto } from './interfaces/interfaces_conversation.interface';
-import { Logger } from '@nestjs/common';
 
 @Injectable()
 export class ConversationsService {
@@ -9,58 +14,83 @@ export class ConversationsService {
 
     constructor(private readonly prisma: PrismaService) {}
 
-    async create(createConversationDto: CreateConversationDto, userId: string) {
+    async create(
+        createConversationDto: CreateConversationDto,
+        initiatorId: string,
+        category: 'Passengers' | 'Drivers' | 'Friends',
+    ) {
         const { rideId, userId: targetUserId } = createConversationDto;
 
-        this.logger.log(`Creating conversation for userId: ${userId}, targetUserId: ${targetUserId}, rideId: ${rideId}`);
-        
-        if (!rideId) {
-            this.logger.error('rideId is required to create a conversation');
-            throw new BadRequestException('rideId is required');
+        this.logger.log(
+            `Creating conversation: initiatorId=${initiatorId}, targetUserId=${targetUserId}, rideId=${rideId}, category=${category}`,
+        );
+
+        let ride;
+        if (rideId) {
+            ride = await this.prisma.ride.findUnique({
+                where: { id: rideId },
+                include: { driver: true, passenger: true },
+            });
+            if (!ride) {
+                this.logger.error(`Ride not found: ${rideId}`);
+                throw new NotFoundException('Ride not found');
+            }
         }
 
-        const ride = await this.prisma.ride.findUnique({ 
-            where: { id: rideId },
-            include: { driver: true, passenger: true }
+        const targetUser = await this.prisma.user.findUnique({
+            where: { id: targetUserId },
         });
-        if (!ride) {
-            this.logger.error('Ride not found:', rideId);
-            throw new NotFoundException('Ride not found');
+        if (!targetUser) {
+            this.logger.error(`Target user not found: ${targetUserId}`);
+            throw new NotFoundException('Target user not found');
         }
 
-        const isDriver = ride.driverId === userId;
-        const conversationId = `conv-${rideId}-${isDriver ? 'driver-' + targetUserId : 'passenger-' + userId}`;
+        // Генеруємо унікальний conversationId
+        const conversationId = rideId
+            ? `conv-${rideId}-${initiatorId}-${targetUserId}-${category}`
+            : `conv-${initiatorId}-${targetUserId}-${category}`;
 
+        // Перевіряємо, чи розмова вже існує
         const existingConversation = await this.prisma.conversation.findUnique({
             where: { id: conversationId },
         });
 
         if (existingConversation) {
             this.logger.log(`Conversation already exists: ${conversationId}`);
-            return { success: true, conversationId: existingConversation.id };
+            return {
+                success: true,
+                conversationId: existingConversation.id,
+            };
         }
 
+        // Створюємо розмову
         const conversation = await this.prisma.conversation.create({
             data: {
                 id: conversationId,
-                userId: targetUserId,
-                rideId: rideId,
+                userId: initiatorId,
+                targetUserId,
+                rideId,
+                category,
             },
             include: {
                 user: { select: { id: true, name: true, avatar: true } },
-                ride: { 
-                    select: { 
-                        id: true, 
+                targetUser: { select: { id: true, name: true, avatar: true } },
+                ride: {
+                    select: {
+                        id: true,
                         driverId: true,
                         driver: { select: { id: true, name: true, avatar: true } },
-                        passenger: { select: { id: true, name: true, avatar: true } }
-                    } 
+                        passenger: { select: { id: true, name: true, avatar: true } },
+                    },
                 },
             },
         });
 
-        this.logger.log('Conversation created:', conversation);
-        return { success: true, conversationId: conversation.id };
+        this.logger.log(`Conversation created: ${conversationId}`);
+        return {
+            success: true,
+            conversationId: conversation.id,
+        };
     }
 
     async sendMessage(
@@ -68,26 +98,25 @@ export class ConversationsService {
         createMessageDto: CreateMessageDto,
         senderId: string,
     ) {
-        this.logger.log(`Sending message to conversationId: ${conversationId}, senderId: ${senderId}, content: ${createMessageDto.content}`);
+        this.logger.log(
+            `Sending message to conversationId: ${conversationId}, senderId: ${senderId}, content: ${createMessageDto.content}`,
+        );
         const conversation = await this.prisma.conversation.findUnique({
             where: { id: conversationId },
             include: { ride: true },
         });
 
         if (!conversation) {
-            this.logger.error('Conversation not found:', conversationId);
+            this.logger.error(`Conversation not found: ${conversationId}`);
             throw new NotFoundException('Conversation not found');
         }
 
-        this.logger.log('Conversation found:', conversation);
-        if (conversation.userId !== senderId && conversation.rideId) {
-            const ride = await this.prisma.ride.findUnique({
-                where: { id: conversation.rideId },
-            });
-            if (ride?.driverId !== senderId) {
-                this.logger.error(`User ${senderId} not authorized to send message in conversation ${conversationId}`);
-                throw new ForbiddenException('Not authorized to send message');
-            }
+        // Перевіряємо, чи користувач є учасником розмови
+        if (conversation.userId !== senderId && conversation.targetUserId !== senderId) {
+            this.logger.error(
+                `User ${senderId} not authorized to send message in conversation ${conversationId}`,
+            );
+            throw new ForbiddenException('Not authorized to send message');
         }
 
         const message = await this.prisma.message.create({
@@ -101,7 +130,7 @@ export class ConversationsService {
             },
         });
 
-        this.logger.log('Message sent:', message);
+        this.logger.log(`Message sent: ${message.id}`);
         return { success: true, message };
     }
 
@@ -113,18 +142,15 @@ export class ConversationsService {
         });
 
         if (!conversation) {
-            this.logger.error('Conversation not found:', conversationId);
+            this.logger.error(`Conversation not found: ${conversationId}`);
             throw new NotFoundException('Conversation not found');
         }
 
-        if (conversation.userId !== userId && conversation.rideId) {
-            const ride = await this.prisma.ride.findUnique({
-                where: { id: conversation.rideId },
-            });
-            if (ride?.driverId !== userId) {
-                this.logger.error(`User ${userId} not authorized to view messages in conversation ${conversationId}`);
-                throw new ForbiddenException('Not authorized to view messages');
-            }
+        if (conversation.userId !== userId && conversation.targetUserId !== userId) {
+            this.logger.error(
+                `User ${userId} not authorized to view messages in conversation ${conversationId}`,
+            );
+            throw new ForbiddenException('Not authorized to view messages');
         }
 
         const messages = await this.prisma.message.findMany({
@@ -142,7 +168,7 @@ export class ConversationsService {
             data: { read: true },
         });
 
-        this.logger.log('Messages fetched:', messages);
+        this.logger.log(`Messages fetched: ${messages.length}`);
         return { success: true, messages };
     }
 
@@ -150,13 +176,11 @@ export class ConversationsService {
         this.logger.log(`Fetching conversations for userId: ${userId}`);
         const conversations = await this.prisma.conversation.findMany({
             where: {
-                OR: [
-                    { userId },
-                    { ride: { driverId: userId } },
-                ],
+                OR: [{ userId }, { targetUserId: userId }],
             },
             include: {
                 user: { select: { id: true, name: true, avatar: true } },
+                targetUser: { select: { id: true, name: true, avatar: true } },
                 ride: {
                     include: {
                         driver: { select: { id: true, name: true, avatar: true } },
@@ -169,45 +193,16 @@ export class ConversationsService {
                 },
             },
         });
-        this.logger.log('Conversations from DB:', conversations);
 
         const formattedConversations = await Promise.all(
             conversations.map(async (conversation) => {
-                const isUserTheDriver = conversation.ride?.driverId === userId;
-                let contact;
-                let category;
-
-                const areFriends = await this.prisma.friend.findFirst({
-                    where: {
-                        OR: [
-                            { userId: userId, friendId: conversation.userId },
-                            { userId: conversation.userId, friendId: userId },
-                        ],
-                    },
-                });
-
-                this.logger.log(`Conversation ${conversation.id}: userId=${userId}, targetUserId=${conversation.userId}, areFriends=${!!areFriends}`);
-
-                if (areFriends) {
-                    category = 'Friends';
-                    contact = conversation.user;
-                } else if (conversation.id.includes('-passenger-')) {
-                    category = 'Passengers';
-                    contact = conversation.user; // For driver, passenger is contact
-                } else if (conversation.id.includes('-driver-')) {
-                    category = 'Drivers';
-                    contact = conversation.ride?.driver; // For passenger, driver is contact
-                } else {
-                    category = isUserTheDriver ? 'Passengers' : 'Drivers';
-                    contact = isUserTheDriver ? conversation.user : conversation.ride?.driver;
-                }
+                const isInitiator = conversation.userId === userId;
+                const contact = isInitiator ? conversation.targetUser : conversation.user;
 
                 if (!contact?.id) {
                     this.logger.warn(`Skipping conversation ${conversation.id} with invalid contact`);
                     return null;
                 }
-
-                this.logger.log(`Conversation ${conversation.id}: category=${category}, contactId=${contact.id}, contactName=${contact.name}`);
 
                 const unreadMessages = await this.prisma.message.count({
                     where: {
@@ -220,6 +215,7 @@ export class ConversationsService {
                 return {
                     id: conversation.id,
                     userId: conversation.userId,
+                    targetUserId: conversation.targetUserId,
                     rideId: conversation.rideId,
                     createdAt: conversation.createdAt,
                     updatedAt: conversation.updatedAt,
@@ -228,7 +224,7 @@ export class ConversationsService {
                         name: contact.name,
                         avatar: contact.avatar,
                     },
-                    category,
+                    category: conversation.category,
                     lastMessage: conversation.messages[0]
                         ? {
                               text: conversation.messages[0].content,
@@ -240,20 +236,25 @@ export class ConversationsService {
             }),
         );
 
-        const validConversations = formattedConversations.filter(conv => conv !== null);
-        this.logger.log('Formatted conversations:', validConversations);
+        const validConversations = formattedConversations.filter((conv) => conv !== null);
+        this.logger.log(`Formatted conversations: ${validConversations.length}`);
         return { success: true, conversations: validConversations };
     }
 
-    async getConversationsByCategory(userId: string, category: 'Friends' | 'Passengers' | 'Drivers') {
+    async getConversationsByCategory(
+        userId: string,
+        category: 'Friends' | 'Passengers' | 'Drivers',
+    ) {
         this.logger.log(`Fetching conversations for userId: ${userId}, category: ${category}`);
         const conversations = await this.getConversations(userId);
         if (!conversations.success) {
             throw new BadRequestException('Failed to fetch conversations');
         }
 
-        const filteredConversations = conversations.conversations.filter(conv => conv.category === category);
-        this.logger.log(`Filtered conversations for ${category}:`, filteredConversations);
+        const filteredConversations = conversations.conversations.filter(
+            (conv) => conv.category === category,
+        );
+        this.logger.log(`Filtered conversations for ${category}: ${filteredConversations.length}`);
         return filteredConversations;
     }
 }

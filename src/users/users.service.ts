@@ -1,4 +1,10 @@
-import { Injectable, NotFoundException, BadRequestException, UnauthorizedException, Logger } from '@nestjs/common';
+import {
+    Injectable,
+    NotFoundException,
+    BadRequestException,
+    UnauthorizedException,
+    Logger,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CreateUserDto } from '../dto/create-user.dto';
 import { UpdateUserDto } from '../dto/update-user.dto';
@@ -14,6 +20,7 @@ import { ConversationsService } from '../conversations/conversations.service';
 @Injectable()
 export class UsersService {
     private readonly logger = new Logger(UsersService.name);
+
     constructor(
         private readonly prisma: PrismaService,
         private readonly authService: AuthService,
@@ -33,7 +40,7 @@ export class UsersService {
     }
 
     async findOne(id: string): Promise<UserEntity | null> {
-        console.log('Finding user with ID:', id);
+        this.logger.log(`Finding user with ID: ${id}`);
         const user = await this.prisma.user.findUnique({
             where: { id },
             select: {
@@ -55,10 +62,10 @@ export class UsersService {
             },
         });
         if (!user) {
-            console.log(`User with ID ${id} not found`);
+            this.logger.warn(`User with ID ${id} not found`);
             return null;
         }
-        console.log('Found user:', user);
+        this.logger.log(`Found user: ${JSON.stringify(user)}`);
         return user;
     }
 
@@ -105,7 +112,13 @@ export class UsersService {
         });
     }
 
-    async changePassword(id: string, email: string, currentPassword: string, newPassword: string, verificationCode: string): Promise<UserEntity> {
+    async changePassword(
+        id: string,
+        email: string,
+        currentPassword: string,
+        newPassword: string,
+        verificationCode: string,
+    ): Promise<UserEntity> {
         const user = await this.findOne(id);
         if (!user) {
             throw new NotFoundException(`Користувача з ID ${id} не знайдено`);
@@ -153,11 +166,11 @@ export class UsersService {
         if (user.avatar && typeof user.avatar === 'string' && user.avatar !== 'undefined') {
             try {
                 const filePath = join(process.cwd(), user.avatar);
-                console.log('Attempting to delete old avatar at:', filePath);
+                this.logger.log(`Attempting to delete old avatar at: ${filePath}`);
                 await unlink(filePath);
-                console.log(`Deleted old avatar: ${user.avatar}`);
+                this.logger.log(`Deleted old avatar: ${user.avatar}`);
             } catch (err: any) {
-                console.error(`Failed to delete old avatar: ${err.message ?? err}`);
+                this.logger.error(`Failed to delete old avatar: ${err.message ?? err}`);
             }
         }
 
@@ -175,11 +188,11 @@ export class UsersService {
         if (user.avatar && typeof user.avatar === 'string' && user.avatar !== 'undefined') {
             try {
                 const filePath = join(process.cwd(), user.avatar);
-                console.log('Attempting to delete avatar at:', filePath);
+                this.logger.log(`Attempting to delete avatar at: ${filePath}`);
                 await unlink(filePath);
-                console.log(`Deleted avatar on user delete: ${user.avatar}`);
+                this.logger.log(`Deleted avatar on user delete: ${user.avatar}`);
             } catch (err: any) {
-                console.error(`Failed to delete avatar on user delete: ${err.message ?? err}`);
+                this.logger.error(`Failed to delete avatar on user delete: ${err.message ?? err}`);
             }
         }
         await this.prisma.user.delete({
@@ -193,7 +206,9 @@ export class UsersService {
             include: {
                 driverRides: true,
                 passengerRides: true,
-                reviewsReceived: { include: { author: { select: { id: true, name: true, avatar: true, rating: true } } } },
+                reviewsReceived: {
+                    include: { author: { select: { id: true, name: true, avatar: true, rating: true } } },
+                },
                 friendsInitiated: { where: { friendId: requesterId } },
             },
         });
@@ -203,13 +218,13 @@ export class UsersService {
         }
 
         const trips = [
-            ...user.driverRides.map(ride => ({
+            ...user.driverRides.map((ride) => ({
                 id: ride.id,
                 date: ride.departureTime.toISOString().split('T')[0],
                 route: `${ride.startLocation} - ${ride.endLocation}`,
                 role: 'Driver',
             })),
-            ...user.passengerRides.map(ride => ({
+            ...user.passengerRides.map((ride) => ({
                 id: ride.id,
                 date: ride.departureTime.toISOString().split('T')[0],
                 route: `${ride.startLocation} - ${ride.endLocation}`,
@@ -225,7 +240,7 @@ export class UsersService {
                 avatar: user.avatar,
                 rating: user.rating ?? 0,
                 trips,
-                reviews: user.reviewsReceived.map(review => ({
+                reviews: user.reviewsReceived.map((review) => ({
                     id: review.id,
                     author: {
                         id: review.author.id,
@@ -378,7 +393,24 @@ export class UsersService {
                 },
             });
 
-            this.logger.log(`Friend request created: ${senderId} -> ${receiverId}`);
+            // Створюємо розмови для обох користувачів із категорією "Friends"
+            const senderConversation = await this.conversationsService.create(
+                {
+                    userId: receiverId, // Отримувач як контакт
+                },
+                senderId, // Відправник ініціатор
+                'Friends',
+            );
+
+            const receiverConversation = await this.conversationsService.create(
+                {
+                    userId: senderId, // Відправник як контакт
+                },
+                receiverId, // Отримувач ініціатор
+                'Friends',
+            );
+
+            this.logger.log(`Friend request created: ${senderId} -> ${receiverId}, conversations: sender=${senderConversation.conversationId}, receiver=${receiverConversation.conversationId}`);
             return { success: true, friendRequest };
         } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
@@ -549,7 +581,9 @@ export class UsersService {
         const user = await this.prisma.user.findUnique({
             where: { id: userId },
             include: {
-                reviewsReceived: { include: { author: { select: { id: true, name: true, avatar: true, rating: true } } } },
+                reviewsReceived: {
+                    include: { author: { select: { id: true, name: true, avatar: true, rating: true } } },
+                },
             },
         });
 
@@ -559,7 +593,7 @@ export class UsersService {
 
         return {
             success: true,
-            reviews: user.reviewsReceived.map(review => ({
+            reviews: user.reviewsReceived.map((review) => ({
                 id: review.id,
                 author: {
                     id: review.author.id,
@@ -712,8 +746,8 @@ export class UsersService {
             },
         });
 
-        const formattedDriverRequests = driverRides.flatMap(ride =>
-            ride.bookingRequests.map(request => ({
+        const formattedDriverRequests = driverRides.flatMap((ride) =>
+            ride.bookingRequests.map((request) => ({
                 id: request.id,
                 rideId: ride.id,
                 startLocation: ride.startLocation,
@@ -729,10 +763,10 @@ export class UsersService {
                 },
                 requestStatus: request.status,
                 createdAt: request.createdAt.toISOString(),
-            }))
+            })),
         );
 
-        const formattedPassengerRequests = passengerRequests.map(request => ({
+        const formattedPassengerRequests = passengerRequests.map((request) => ({
             id: request.id,
             rideId: request.rideId,
             startLocation: request.ride.startLocation,
@@ -813,25 +847,29 @@ export class UsersService {
             });
         }
 
-        // Create conversation for passenger (contact is driver)
-        const passengerConversation = await this.conversationsService.create(
-            {
-                rideId: bookingRequest.rideId,
-                userId: driverId, // Driver as contact
-            },
-            bookingRequest.passengerId // Passenger initiates
-        );
-
-        // Create conversation for driver (contact is passenger)
+        // Створюємо розмову для водія (контакт — пасажир)
         const driverConversation = await this.conversationsService.create(
             {
                 rideId: bookingRequest.rideId,
-                userId: bookingRequest.passengerId, // Passenger as contact
+                userId: bookingRequest.passengerId, // Пасажир як контакт
             },
-            driverId // Driver initiates
+            driverId, // Водій ініціатор
+            'Passengers',
         );
 
-        this.logger.log(`Created conversations: passenger=${passengerConversation.conversationId}, driver=${driverConversation.conversationId}, rideStatus=${newStatus}, availableSeats=${newAvailableSeats}`);
+        // Створюємо розмову для пасажира (контакт — водій)
+        const passengerConversation = await this.conversationsService.create(
+            {
+                rideId: bookingRequest.rideId,
+                userId: driverId, // Водій як контакт
+            },
+            bookingRequest.passengerId, // Пасажир ініціатор
+            'Drivers',
+        );
+
+        this.logger.log(
+            `Created conversations: passenger=${passengerConversation.conversationId}, driver=${driverConversation.conversationId}, rideStatus=${newStatus}, availableSeats=${newAvailableSeats}`,
+        );
 
         return { success: true };
     }
@@ -862,8 +900,16 @@ export class UsersService {
         return { success: true };
     }
 
-    async searchUsers(query: string, currentUserId: string, category?: string, limit: number = 10, offset: number = 0) {
-        console.log(`Searching users with query: ${query}, currentUserId: ${currentUserId}, category: ${category}, limit: ${limit}, offset: ${offset}`);
+    async searchUsers(
+        query: string,
+        currentUserId: string,
+        category?: string,
+        limit: number = 10,
+        offset: number = 0,
+    ) {
+        this.logger.log(
+            `Searching users with query: ${query}, currentUserId: ${currentUserId}, category: ${category}, limit: ${limit}, offset: ${offset}`,
+        );
 
         const currentUser = await this.findOne(currentUserId);
         if (!currentUser) {
@@ -871,7 +917,7 @@ export class UsersService {
         }
 
         if (!query || query.trim() === '') {
-            console.log('Query is empty, returning empty list');
+            this.logger.log('Query is empty, returning empty list');
             return { success: true, users: [], total: 0 };
         }
 
@@ -964,9 +1010,9 @@ export class UsersService {
             }),
         );
 
-        const filteredUsers = usersWithDetails.filter(user => user !== null);
+        const filteredUsers = usersWithDetails.filter((user) => user !== null);
 
-        console.log('Search results:', filteredUsers);
+        this.logger.log('Search results:', filteredUsers);
         return { success: true, users: filteredUsers, total };
     }
 
@@ -984,12 +1030,12 @@ export class UsersService {
         }
 
         const friends = [
-            ...user.friendsInitiated.map(f => ({
+            ...user.friendsInitiated.map((f) => ({
                 id: f.friend.id,
                 name: f.friend.name,
                 avatar: f.friend.avatar,
             })),
-            ...user.friendsReceived.map(f => ({
+            ...user.friendsReceived.map((f) => ({
                 id: f.user.id,
                 name: f.user.name,
                 avatar: f.user.avatar,
@@ -1002,21 +1048,22 @@ export class UsersService {
     async getFriendsList(userId: string) {
         this.logger.log(`Fetching friends list for userId: ${userId}`);
         const conversations = await this.conversationsService.getConversationsByCategory(userId, 'Friends');
-        const friends = conversations.map(conv => ({
+        const friends = conversations.map((conv) => ({
             id: conv.contact.id,
             name: conv.contact.name,
             avatar: conv.contact.avatar,
             conversationId: conv.id,
-            lastMessage: conv.lastMessage ? {
-                text: conv.lastMessage.text,
-                timestamp: conv.lastMessage.timestamp,
-            } : null,
+            lastMessage: conv.lastMessage
+                ? {
+                      text: conv.lastMessage.text,
+                      timestamp: conv.lastMessage.timestamp,
+                  }
+                : null,
             unreadMessages: conv.unreadMessages,
         }));
 
-        // Унікалізуємо друзів за id
         const uniqueFriendsMap = new Map<string, typeof friends[0]>();
-        friends.forEach(friend => {
+        friends.forEach((friend) => {
             if (!uniqueFriendsMap.has(friend.id)) {
                 uniqueFriendsMap.set(friend.id, friend);
             }
@@ -1030,22 +1077,23 @@ export class UsersService {
     async getPassengers(userId: string) {
         this.logger.log(`Fetching passengers for userId: ${userId}`);
         const conversations = await this.conversationsService.getConversationsByCategory(userId, 'Passengers');
-        const passengers = conversations.map(conv => ({
+        const passengers = conversations.map((conv) => ({
             id: conv.contact.id,
             name: conv.contact.name,
             avatar: conv.contact.avatar,
             conversationId: conv.id,
             rideId: conv.rideId,
-            lastMessage: conv.lastMessage ? {
-                text: conv.lastMessage.text,
-                timestamp: conv.lastMessage.timestamp,
-            } : null,
+            lastMessage: conv.lastMessage
+                ? {
+                      text: conv.lastMessage.text,
+                      timestamp: conv.lastMessage.timestamp,
+                  }
+                : null,
             unreadMessages: conv.unreadMessages,
         }));
 
-        // Унікалізуємо пасажирів за id
         const uniquePassengersMap = new Map<string, typeof passengers[0]>();
-        passengers.forEach(passenger => {
+        passengers.forEach((passenger) => {
             if (!uniquePassengersMap.has(passenger.id)) {
                 uniquePassengersMap.set(passenger.id, passenger);
             }
@@ -1059,22 +1107,23 @@ export class UsersService {
     async getDrivers(userId: string) {
         this.logger.log(`Fetching drivers for userId: ${userId}`);
         const conversations = await this.conversationsService.getConversationsByCategory(userId, 'Drivers');
-        const drivers = conversations.map(conv => ({
+        const drivers = conversations.map((conv) => ({
             id: conv.contact.id,
             name: conv.contact.name,
             avatar: conv.contact.avatar,
             conversationId: conv.id,
             rideId: conv.rideId,
-            lastMessage: conv.lastMessage ? {
-                text: conv.lastMessage.text,
-                timestamp: conv.lastMessage.timestamp,
-            } : null,
+            lastMessage: conv.lastMessage
+                ? {
+                      text: conv.lastMessage.text,
+                      timestamp: conv.lastMessage.timestamp,
+                  }
+                : null,
             unreadMessages: conv.unreadMessages,
         }));
 
-        // Унікалізуємо водіїв за id
         const uniqueDriversMap = new Map<string, typeof drivers[0]>();
-        drivers.forEach(driver => {
+        drivers.forEach((driver) => {
             if (!uniqueDriversMap.has(driver.id)) {
                 uniqueDriversMap.set(driver.id, driver);
             }
