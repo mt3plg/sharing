@@ -7,13 +7,13 @@ import {
     UseGuards,
     HttpCode,
     HttpStatus,
+    Logger,
 } from '@nestjs/common';
 import { ConversationsService } from './conversations.service';
 import { CreateConversationDto, CreateMessageDto } from './interfaces/interfaces_conversation.interface';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser } from '../common/decorators/common_decorators_user.decorator';
-import { Logger } from '@nestjs/common';
 
 @ApiTags('conversations')
 @Controller('conversations')
@@ -33,7 +33,7 @@ export class ConversationsController {
     async create(@Body() createConversationDto: CreateConversationDto, @AuthUser() user: any) {
         this.logger.log(`Creating conversation for user ${user.id}: ${JSON.stringify(createConversationDto)}`);
         // Визначаємо категорію залежно від контексту
-        const category = createConversationDto.rideId ? 'Passengers' : 'Friends';
+        const category = createConversationDto.rideId ? 'Ride' : 'Friends';
         return this.conversationsService.create(createConversationDto, user.id, category);
     }
 
