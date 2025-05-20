@@ -801,7 +801,7 @@ export class UsersService {
     async acceptBookingRequest(bookingRequestId: string, driverId: string) {
         const bookingRequest = await this.prisma.bookingRequest.findUnique({
             where: { id: bookingRequestId },
-            include: { ride: { include: { driver: true, passenger: true } } },
+            include: { ride: { include: { driver: true } } },
         });
 
         if (!bookingRequest) {
@@ -828,11 +828,11 @@ export class UsersService {
         const newAvailableSeats = bookingRequest.ride.availableSeats - 1;
         const newStatus = newAvailableSeats === 0 ? 'booked' : 'active';
 
+        // Оновлюємо лише кількість доступних місць і статус, НЕ змінюємо passengerId
         await this.prisma.ride.update({
             where: { id: bookingRequest.rideId },
             data: {
                 availableSeats: newAvailableSeats,
-                passengerId: bookingRequest.passengerId,
                 status: newStatus,
             },
         });
@@ -854,7 +854,7 @@ export class UsersService {
                 userId: bookingRequest.passengerId, // Пасажир як контакт
             },
             driverId, // Водій ініціатор
-            'Ride', // Нейтральна категорія
+            'Ride',
         );
 
         this.logger.log(
@@ -1067,70 +1067,204 @@ export class UsersService {
     async getPassengers(userId: string) {
         this.logger.log(`Fetching passengers for userId: ${userId}`);
         const conversations = await this.conversationsService.getConversationsByCategory(userId, 'Ride');
-        const passengers = conversations
-            .filter((conv) => {
-                // Водій бачить пасажирів у розмовах, де він driverId
-                return conv.ride && conv.ride.driverId === userId;
-            })
-            .map((conv) => ({
-                id: conv.contact.id,
-                name: conv.contact.name,
-                avatar: conv.contact.avatar,
-                conversationId: conv.id,
-                rideId: conv.rideId,
-                lastMessage: conv.lastMessage
-                    ? {
-                          text: conv.lastMessage.text,
-                          timestamp: conv.lastMessage.timestamp,
-                      }
-                    : null,
-                unreadMessages: conv.unreadMessages,
-            }));
-
-        const uniquePassengersMap = new Map<string, typeof passengers[0]>();
-        passengers.forEach((passenger) => {
-            if (!uniquePassengersMap.has(passenger.id)) {
-                uniquePassengersMap.set(passenger.id, passenger);
+    
+        // Перевіряємо, чи є користувач водієм чи пасажиром
+        const userIsDriver = conversations.some((conv) => conv.ride?.driverId === userId);
+    
+        if (userIsDriver) {
+            // Для водія повертаємо всіх пасажирів у його поїздках
+            const passengers = conversations
+                .filter((conv) => conv.ride?.driverId === userId)
+                .map((conv) => ({
+                    id: conv.contact.id,
+                    name: conv.contact.name,
+                    avatar: conv.contact.avatar,
+                    conversationId: conv.id,
+                    rideId: conv.rideId,
+                    lastMessage: conv.lastMessage
+                        ? {
+                              text: conv.lastMessage.text,
+                              timestamp: conv.lastMessage.timestamp,
+                          }
+                        : null,
+                    unreadMessages: conv.unreadMessages,
+                }));
+    
+            const uniquePassengersMap = new Map<string, typeof passengers[0]>();
+            passengers.forEach((passenger) => {
+                if (!uniquePassengersMap.has(passenger.id)) {
+                    uniquePassengersMap.set(passenger.id, passenger);
+                }
+            });
+    
+            const uniquePassengers = Array.from(uniquePassengersMap.values());
+            this.logger.log(`Passengers for user ${userId}:`, uniquePassengers);
+            return { success: true, passengers: uniquePassengers };
+        } else {
+            // Для пасажира повертаємо інших пасажирів у тих самих поїздках
+            const rideIds = conversations
+                .filter((conv) => conv.rideId)
+                .map((conv) => conv.rideId)
+                .filter((rideId): rideId is string => rideId !== null);
+    
+            if (rideIds.length === 0) {
+                this.logger.log(`No rides found for passenger ${userId}`);
+                return { success: true, passengers: [] };
             }
-        });
-
-        const uniquePassengers = Array.from(uniquePassengersMap.values());
-        this.logger.log(`Passengers for user ${userId}:`, uniquePassengers);
-        return { success: true, passengers: uniquePassengers };
+    
+            // Отримуємо всіх пасажирів у цих поїздках, крім поточного користувача
+            const bookingRequests = await this.prisma.bookingRequest.findMany({
+                where: {
+                    rideId: { in: rideIds },
+                    status: 'accepted',
+                    passengerId: { not: userId },
+                },
+                include: {
+                    passenger: {
+                        select: { id: true, name: true, avatar: true },
+                    },
+                    ride: {
+                        include: {
+                            driver: { select: { id: true } },
+                        },
+                    },
+                },
+            });
+    
+            const passengers = await Promise.all(
+                bookingRequests.map(async (request) => {
+                    // Шукаємо розмову між водієм і цим пасажиром
+                    const conversation = await this.prisma.conversation.findFirst({
+                        where: {
+                            rideId: request.rideId,
+                            userId: request.ride.driver.id,
+                            targetUserId: request.passengerId,
+                            category: 'Ride',
+                        },
+                        include: {
+                            messages: {
+                                orderBy: { createdAt: 'desc' },
+                                take: 1,
+                            },
+                        },
+                    });
+    
+                    const unreadMessages = conversation
+                        ? await this.prisma.message.count({
+                              where: {
+                                  conversationId: conversation.id,
+                                  senderId: { not: userId },
+                                  read: false,
+                              },
+                          })
+                        : 0;
+    
+                    return {
+                        id: request.passenger.id,
+                        name: request.passenger.name,
+                        avatar: request.passenger.avatar,
+                        conversationId: conversation?.id ?? null,
+                        rideId: request.rideId,
+                        lastMessage: conversation?.messages[0]
+                            ? {
+                                  text: conversation.messages[0].content,
+                                  timestamp: conversation.messages[0].createdAt.toISOString(),
+                              }
+                            : null,
+                        unreadMessages,
+                    };
+                }),
+            );
+    
+            const uniquePassengersMap = new Map<string, typeof passengers[0]>();
+            passengers.forEach((passenger) => {
+                if (!uniquePassengersMap.has(passenger.id)) {
+                    uniquePassengersMap.set(passenger.id, passenger);
+                }
+            });
+    
+            const uniquePassengers = Array.from(uniquePassengersMap.values());
+            this.logger.log(`Passengers for user ${userId}:`, uniquePassengers);
+            return { success: true, passengers: uniquePassengers };
+        }
     }
-
+    
     async getDrivers(userId: string) {
         this.logger.log(`Fetching drivers for userId: ${userId}`);
         const conversations = await this.conversationsService.getConversationsByCategory(userId, 'Ride');
-        const drivers = conversations
-            .filter((conv) => {
-                // Пасажир бачить водіїв у розмовах, де він passengerId
-                return conv.ride && conv.ride.passengerId === userId;
-            })
-            .map((conv) => ({
-                id: conv.contact.id,
-                name: conv.contact.name,
-                avatar: conv.contact.avatar,
-                conversationId: conv.id,
-                rideId: conv.rideId,
-                lastMessage: conv.lastMessage
-                    ? {
-                          text: conv.lastMessage.text,
-                          timestamp: conv.lastMessage.timestamp,
-                      }
-                    : null,
-                unreadMessages: conv.unreadMessages,
-            }));
-
+    
+        // Отримуємо rideIds для розмов, де є rideId
+        const rideIds = conversations
+            .filter((conv) => conv.rideId)
+            .map((conv) => conv.rideId)
+            .filter((rideId): rideId is string => rideId !== null);
+    
+        if (rideIds.length === 0) {
+            this.logger.log(`No rides found for user ${userId}`);
+            return { success: true, drivers: [] };
+        }
+    
+        // Перевіряємо, чи є користувач пасажиром із прийнятим запитом на бронювання
+        const bookingRequests = await this.prisma.bookingRequest.findMany({
+            where: {
+                rideId: { in: rideIds },
+                passengerId: userId,
+                status: 'accepted',
+            },
+            include: {
+                ride: {
+                    include: {
+                        driver: { select: { id: true, name: true, avatar: true } },
+                    },
+                },
+            },
+        });
+    
+        const drivers = await Promise.all(
+            bookingRequests.map(async (request) => {
+                const conversation = conversations.find(
+                    (conv) =>
+                        conv.rideId === request.rideId &&
+                        conv.contact.id === request.ride.driver.id,
+                );
+    
+                const unreadMessages = conversation
+                    ? await this.prisma.message.count({
+                          where: {
+                              conversationId: conversation.id,
+                              senderId: { not: userId },
+                              read: false,
+                          },
+                      })
+                    : 0;
+    
+                return {
+                    id: request.ride.driver.id,
+                    name: request.ride.driver.name,
+                    avatar: request.ride.driver.avatar,
+                    conversationId: conversation?.id ?? null,
+                    rideId: request.rideId,
+                    lastMessage: conversation?.lastMessage
+                        ? {
+                              text: conversation.lastMessage.text,
+                              timestamp: conversation.lastMessage.timestamp,
+                          }
+                        : null,
+                    unreadMessages,
+                };
+            }),
+        );
+    
         const uniqueDriversMap = new Map<string, typeof drivers[0]>();
         drivers.forEach((driver) => {
             if (!uniqueDriversMap.has(driver.id)) {
                 uniqueDriversMap.set(driver.id, driver);
             }
         });
-
+    
         const uniqueDrivers = Array.from(uniqueDriversMap.values());
         this.logger.log(`Drivers for user ${userId}:`, uniqueDrivers);
         return { success: true, drivers: uniqueDrivers };
     }
+
 }
