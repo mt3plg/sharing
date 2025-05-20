@@ -17,7 +17,7 @@ export class ConversationsService {
     async create(
         createConversationDto: CreateConversationDto,
         initiatorId: string,
-        category: 'Ride' | 'Friends',
+        category: 'Ride' | 'Friends' | 'RidePassenger',
     ) {
         const { rideId, userId: targetUserId } = createConversationDto;
 
@@ -134,42 +134,80 @@ export class ConversationsService {
         return { success: true, message };
     }
 
-    async getMessages(conversationId: string, userId: string) {
+    async getMessages(conversationId: string, userId: string, limit = 20, offset = 0) {
         this.logger.log(`Fetching messages for conversationId: ${conversationId}, userId: ${userId}`);
+        
         const conversation = await this.prisma.conversation.findUnique({
             where: { id: conversationId },
             include: { ride: true },
         });
-
+    
         if (!conversation) {
-            this.logger.error(`Conversation not found: ${conversationId}`);
             throw new NotFoundException('Conversation not found');
         }
-
-        if (conversation.userId !== userId && conversation.targetUserId !== userId) {
-            this.logger.error(
-                `User ${userId} not authorized to view messages in conversation ${conversationId}`,
-            );
-            throw new ForbiddenException('Not authorized to view messages');
+    
+        // Перевіряємо авторизацію
+        if (conversation.category === 'Ride') {
+            // Для розмов категорії Ride: тільки водій або пасажир
+            if (conversation.userId !== userId && conversation.targetUserId !== userId) {
+                this.logger.error(
+                    `User ${userId} not authorized to view messages in conversation ${conversationId}`,
+                );
+                throw new ForbiddenException('Not authorized to view messages');
+            }
+        } else if (conversation.category === 'RidePassenger') {
+            // Для розмов категорії RidePassenger: тільки пасажири у поїздці
+            if (!conversation.rideId) {
+                this.logger.error(
+                    `Conversation ${conversationId} with category RidePassenger has no rideId`,
+                );
+                throw new BadRequestException('Invalid conversation: missing rideId');
+            }
+            const bookingRequest = await this.prisma.bookingRequest.findFirst({
+                where: {
+                    rideId: conversation.rideId,
+                    passengerId: userId,
+                    status: 'accepted',
+                },
+            });
+    
+            if (!bookingRequest) {
+                this.logger.error(
+                    `User ${userId} not authorized to view messages in conversation ${conversationId}`,
+                );
+                throw new ForbiddenException('Not authorized to view messages');
+            }
+        } else if (conversation.category === 'Friends') {
+            // Для розмов категорії Friends: тільки учасники
+            if (conversation.userId !== userId && conversation.targetUserId !== userId) {
+                this.logger.error(
+                    `User ${userId} not authorized to view messages in conversation ${conversationId}`,
+                );
+                throw new ForbiddenException('Not authorized to view messages');
+            }
+        } else {
+            throw new BadRequestException('Invalid conversation category');
         }
-
+    
         const messages = await this.prisma.message.findMany({
             where: { conversationId },
-            orderBy: { createdAt: 'asc' },
-            include: { sender: { select: { id: true, name: true } } },
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+            skip: offset,
+            include: { sender: { select: { id: true, name: true, avatar: true } } },
         });
-
-        await this.prisma.message.updateMany({
-            where: {
-                conversationId,
-                senderId: { not: userId },
-                read: false,
+    
+        return messages.map((message) => ({
+            id: message.id,
+            sender: {
+                id: message.sender.id,
+                name: message.sender.name,
+                avatar: message.sender.avatar,
             },
-            data: { read: true },
-        });
-
-        this.logger.log(`Messages fetched: ${messages.length}`);
-        return { success: true, messages };
+            content: message.content,
+            timestamp: message.createdAt.toISOString(),
+            read: message.read,
+        }));
     }
 
     async getConversations(userId: string) {
@@ -244,7 +282,7 @@ export class ConversationsService {
 
     async getConversationsByCategory(
         userId: string,
-        category: 'Ride' | 'Friends',
+        category: 'Ride' | 'Friends' | 'RidePassenger',
     ) {
         this.logger.log(`Fetching conversations for userId: ${userId}, category: ${category}`);
         const conversations = await this.getConversations(userId);

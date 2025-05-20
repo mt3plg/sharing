@@ -803,32 +803,31 @@ export class UsersService {
             where: { id: bookingRequestId },
             include: { ride: { include: { driver: true } } },
         });
-
+    
         if (!bookingRequest) {
             throw new NotFoundException('Booking request not found');
         }
-
+    
         if (bookingRequest.ride.driverId !== driverId) {
             throw new UnauthorizedException('You are not authorized to accept this booking request');
         }
-
+    
         if (bookingRequest.status !== 'pending') {
             throw new BadRequestException('Booking request is not in pending state');
         }
-
+    
         if (bookingRequest.ride.availableSeats < 1) {
             throw new BadRequestException('No available seats left');
         }
-
+    
         await this.prisma.bookingRequest.update({
             where: { id: bookingRequestId },
             data: { status: 'accepted' },
         });
-
+    
         const newAvailableSeats = bookingRequest.ride.availableSeats - 1;
         const newStatus = newAvailableSeats === 0 ? 'booked' : 'active';
-
-        // Оновлюємо лише кількість доступних місць і статус, НЕ змінюємо passengerId
+    
         await this.prisma.ride.update({
             where: { id: bookingRequest.rideId },
             data: {
@@ -836,7 +835,7 @@ export class UsersService {
                 status: newStatus,
             },
         });
-
+    
         if (newAvailableSeats === 0) {
             await this.prisma.bookingRequest.updateMany({
                 where: {
@@ -846,21 +845,56 @@ export class UsersService {
                 data: { status: 'rejected' },
             });
         }
-
-        // Створюємо одну розмову для поїздки з категорією "Ride"
-        const conversation = await this.conversationsService.create(
+    
+        // Створюємо розмову між водієм і пасажиром
+        const driverPassengerConversation = await this.conversationsService.create(
             {
                 rideId: bookingRequest.rideId,
-                userId: bookingRequest.passengerId, // Пасажир як контакт
+                userId: bookingRequest.passengerId,
             },
-            driverId, // Водій ініціатор
+            driverId,
             'Ride',
         );
-
+    
+        // Знаходимо всіх інших пасажирів із прийнятими запитами у цій поїздці
+        const otherPassengers = await this.prisma.bookingRequest.findMany({
+            where: {
+                rideId: bookingRequest.rideId,
+                status: 'accepted',
+                passengerId: { not: bookingRequest.passengerId },
+            },
+            select: {
+                passengerId: true,
+            },
+        });
+    
+        // Створюємо розмови між новим пасажиром і кожним іншим пасажиром
+        for (const otherPassenger of otherPassengers) {
+            // Розмова: новий пасажир -> інший пасажир
+            await this.conversationsService.create(
+                {
+                    rideId: bookingRequest.rideId,
+                    userId: otherPassenger.passengerId,
+                },
+                bookingRequest.passengerId,
+                'RidePassenger',
+            );
+    
+            // Розмова: інший пасажир -> новий пасажир
+            await this.conversationsService.create(
+                {
+                    rideId: bookingRequest.rideId,
+                    userId: bookingRequest.passengerId,
+                },
+                otherPassenger.passengerId,
+                'RidePassenger',
+            );
+        }
+    
         this.logger.log(
-            `Created conversation: ${conversation.conversationId}, rideStatus=${newStatus}, availableSeats=${newAvailableSeats}`,
+            `Created conversation: ${driverPassengerConversation.conversationId}, rideStatus=${newStatus}, availableSeats=${newAvailableSeats}`,
         );
-
+    
         return { success: true };
     }
 
@@ -1133,13 +1167,15 @@ export class UsersService {
     
             const passengers = await Promise.all(
                 bookingRequests.map(async (request) => {
-                    // Шукаємо розмову між водієм і цим пасажиром
+                    // Шукаємо розмову між поточним пасажиром і цим пасажиром
                     const conversation = await this.prisma.conversation.findFirst({
                         where: {
                             rideId: request.rideId,
-                            userId: request.ride.driver.id,
-                            targetUserId: request.passengerId,
-                            category: 'Ride',
+                            OR: [
+                                { userId: userId, targetUserId: request.passengerId },
+                                { userId: request.passengerId, targetUserId: userId },
+                            ],
+                            category: 'RidePassenger',
                         },
                         include: {
                             messages: {
