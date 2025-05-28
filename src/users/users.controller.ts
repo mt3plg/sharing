@@ -47,35 +47,36 @@ import {
     }
   
     @UseGuards(JwtAuthGuard)
-    @ApiBearerAuth()
-    @Get('me')
-    @ApiOperation({ summary: 'Get current user data' })
-    @ApiResponse({ status: 200, description: 'Returns user data.' })
-    @ApiResponse({ status: 401, description: 'Unauthorized.' })
-    @ApiResponse({ status: 404, description: 'User not found.' })
-    @ApiResponse({ status: 500, description: 'Internal server error.' })
-    async getCurrentUser(@Request() req) {
-      try {
-        const userId = req.user?.sub;
-        if (!userId) {
-          this.logger.error('No user ID found in request');
-          throw new UnauthorizedException('Invalid user authentication');
-        }
-        this.logger.log(`Fetching current user with ID: ${userId}`);
-        const user = await this.usersService.findOne(userId);
-        if (!user) {
-          this.logger.warn(`User with ID ${userId} not found`);
-          throw new NotFoundException('User not found');
-        }
-        return user;
-      } catch (error) {
-        this.logger.error(`Error fetching current user: ${error}`, error);
-        if (error instanceof NotFoundException || error instanceof UnauthorizedException) {
-          throw error;
-        }
-        throw new InternalServerErrorException(`Failed to fetch current user: ${error}`);
-      }
+@ApiBearerAuth()
+@Get('me')
+@ApiOperation({ summary: 'Get current user data' })
+@ApiResponse({ status: 200, description: 'Returns user data.' })
+@ApiResponse({ status: 401, description: 'Unauthorized.' })
+@ApiResponse({ status: 404, description: 'User not found.' })
+@ApiResponse({ status: 500, description: 'Internal server error.' })
+async getCurrentUser(@Request() req) {
+  try {
+    this.logger.log(`Request user: ${JSON.stringify(req.user)}`);
+    const userId = req.user?.id; // Змінено sub на id
+    if (!userId) {
+      this.logger.error('No user ID found in request');
+      throw new UnauthorizedException('Invalid user authentication');
     }
+    this.logger.log(`Fetching current user with ID: ${userId}`);
+    const user = await this.usersService.findOne(userId);
+    if (!user) {
+      this.logger.warn(`User with ID ${userId} not found`);
+      throw new NotFoundException('User not found');
+    }
+    return user;
+  } catch (error) {
+    this.logger.error(`Error fetching current user: ${error}`, error);
+    if (error instanceof NotFoundException || error instanceof UnauthorizedException) {
+      throw error;
+    }
+    throw new InternalServerErrorException(`Failed to fetch current user: ${error}`);
+  }
+}
   
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
