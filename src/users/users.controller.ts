@@ -15,302 +15,312 @@ import {
     HttpCode,
     HttpStatus,
     Query,
-} from '@nestjs/common';
-import { UsersService } from './users.service';
-import { CreateUserDto } from '../dto/create-user.dto';
-import { UpdateUserDto } from '../dto/update-user.dto';
-import { UpdateLocationDto } from '../dto/update-location.dto';
-import { CreateReviewDto } from '../dto/create-review.dto';
-import { SearchUsersQueryDto } from './interfaces/search-users-query.dto';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { AuthUser } from '../common/decorators/common_decorators_user.decorator';
-
-@ApiTags('users')
-@Controller('users')
-export class UsersController {
+  } from '@nestjs/common';
+  import { UsersService } from './users.service';
+  import { CreateUserDto } from '../dto/create-user.dto';
+  import { UpdateUserDto } from '../dto/update-user.dto';
+  import { UpdateLocationDto } from '../dto/update-location.dto';
+  import { CreateReviewDto } from '../dto/create-review.dto';
+  import { SearchUsersQueryDto } from './interfaces/search-users-query.dto';
+  import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
+  import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+  import { FileInterceptor } from '@nestjs/platform-express';
+  import { AuthUser } from '../common/decorators/common_decorators_user.decorator';
+  import { ConfirmCashPaymentDto } from '../payments/interfaces/interfaces_payment.interface';
+  
+  @ApiTags('users')
+  @Controller('users')
+  export class UsersController {
     constructor(private readonly usersService: UsersService) {}
-
+  
     @Post()
-    @ApiOperation({ summary: 'Створити нового користувача' })
-    @ApiResponse({ status: 201, description: 'Користувача успішно створено.' })
-    @ApiResponse({ status: 400, description: 'Помилка запиту.' })
+    @ApiOperation({ summary: 'Create a new user' })
+    @ApiResponse({ status: 201, description: 'User successfully created.' })
+    @ApiResponse({ status: 400, description: 'Bad request.' })
     create(@Body() createUserDto: CreateUserDto) {
-        return this.usersService.create(createUserDto);
+      return this.usersService.create(createUserDto);
     }
-
+  
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @Get('me')
-    @ApiOperation({ summary: 'Отримати дані поточного користувача' })
-    @ApiResponse({ status: 200, description: 'Повертає дані користувача.' })
-    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
+    @ApiOperation({ summary: 'Get current user data' })
+    @ApiResponse({ status: 200, description: 'Returns user data.' })
+    @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async getCurrentUser(@Request() req) {
-        return this.usersService.findOne(req.user.id);
+      return this.usersService.findOne(req.user.sub);
     }
-
+  
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @Patch('me')
-    @ApiOperation({ summary: 'Оновити профіль поточного користувача' })
-    @ApiResponse({ status: 200, description: 'Профіль користувача успішно оновлений.' })
-    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
+    @ApiOperation({ summary: 'Update current user profile' })
+    @ApiResponse({ status: 200, description: 'User profile successfully updated.' })
+    @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async updateProfile(@Request() req, @Body() updateUserDto: UpdateUserDto) {
-        return this.usersService.update(req.user.id, updateUserDto);
+      return this.usersService.update(req.user.sub, updateUserDto);
     }
-
+  
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @Patch('me/password')
-    @ApiOperation({ summary: 'Змінити пароль поточного користувача' })
-    @ApiResponse({ status: 200, description: 'Пароль успішно змінений.' })
-    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
-    @ApiResponse({ status: 400, description: 'Помилка запиту.' })
+    @ApiOperation({ summary: 'Change current user password' })
+    @ApiResponse({ status: 200, description: 'Password successfully changed.' })
+    @ApiResponse({ status: 401, description: 'Unauthorized.' })
+    @ApiResponse({ status: 400, description: 'Bad request.' })
     async changePassword(
-        @Request() req,
-        @Body('currentPassword') currentPassword: string,
-        @Body('newPassword') newPassword: string,
-        @Body('verificationCode') verificationCode: string,
+      @Request() req,
+      @Body('currentPassword') currentPassword: string,
+      @Body('newPassword') newPassword: string,
+      @Body('verificationCode') verificationCode: string,
     ) {
-        return this.usersService.changePassword(req.user.id, req.user.email, currentPassword, newPassword, verificationCode);
+      return this.usersService.changePassword(req.user.sub, req.user.email, currentPassword, newPassword, verificationCode);
     }
-
+  
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @Patch('me/location')
-    @ApiOperation({ summary: 'Оновити місце розташування поточного користувача' })
-    @ApiResponse({ status: 200, description: 'Місце розташування користувача успішно оновлено.' })
-    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
+    @ApiOperation({ summary: 'Update current user location' })
+    @ApiResponse({ status: 200, description: 'User location successfully updated.' })
+    @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async updateLocation(@Request() req, @Body() updateLocationDto: UpdateLocationDto) {
-        return this.usersService.updateLocation(req.user.id, updateLocationDto);
+      return this.usersService.updateLocation(req.user.sub, updateLocationDto);
     }
-
+  
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @Post('me/avatar')
     @ApiConsumes('multipart/form-data')
-    @ApiOperation({ summary: 'Завантажити аватар поточного користувача' })
-    @ApiResponse({ status: 200, description: 'Аватар користувача успішно завантажено.' })
-    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
-    @ApiResponse({ status: 400, description: 'Помилка запиту.' })
+    @ApiOperation({ summary: 'Upload current user avatar' })
+    @ApiResponse({ status: 200, description: 'User avatar successfully uploaded.' })
+    @ApiResponse({ status: 401, description: 'Unauthorized.' })
+    @ApiResponse({ status: 400, description: 'Bad request.' })
     @UseInterceptors(FileInterceptor('avatar'))
     async uploadAvatar(@Request() req, @UploadedFile() file: Express.Multer.File) {
-        console.log('Received file:', file);
-        if (!file) {
-            throw new BadRequestException('Файл не завантажено');
-        }
-        if (!file.filename) {
-            throw new BadRequestException('File upload failed: filename is undefined');
-        }
-        const avatarPath = `/Uploads/avatars/${file.filename}`;
-        console.log('Saving avatar with path:', avatarPath);
-        const updatedUser = await this.usersService.updateAvatar(req.user.id, avatarPath);
-        return updatedUser;
+      if (!file) {
+        throw new BadRequestException('File not uploaded');
+      }
+      if (!file.filename) {
+        throw new BadRequestException('File upload failed: filename is undefined');
+      }
+      const avatarPath = `/Uploads/avatars/${file.filename}`;
+      return this.usersService.updateAvatar(req.user.sub, avatarPath);
     }
-
+  
     @Get(':id')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
-    @ApiOperation({ summary: 'Отримати профіль користувача за ID' })
-    @ApiResponse({ status: 200, description: 'Повертає профіль користувача.' })
-    @ApiResponse({ status: 404, description: 'Користувача не знайдено.' })
+    @ApiOperation({ summary: 'Get user profile by ID' })
+    @ApiResponse({ status: 200, description: 'Returns user profile.' })
+    @ApiResponse({ status: 404, description: 'User not found.' })
     async getUserProfile(@Param('id') userId: string, @AuthUser() user: any) {
-        return this.usersService.getUserProfile(userId, user.id);
+      return this.usersService.getUserProfile(userId, user.sub);
     }
-
+  
     @Patch(':id')
-    @ApiOperation({ summary: 'Оновити користувача за ID' })
-    @ApiResponse({ status: 200, description: 'Користувача успішно оновлено.' })
-    @ApiResponse({ status: 404, description: 'Користувача не знайдено.' })
+    @ApiOperation({ summary: 'Update user by ID' })
+    @ApiResponse({ status: 200, description: 'User successfully updated.' })
+    @ApiResponse({ status: 404, description: 'User not found.' })
     update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
-        return this.usersService.update(id, updateUserDto);
+      return this.usersService.update(id, updateUserDto);
     }
-
+  
     @Delete(':id')
-    @ApiOperation({ summary: 'Видалити користувача за ID' })
-    @ApiResponse({ status: 200, description: 'Користувача успішно видалено.' })
-    @ApiResponse({ status: 404, description: 'Користувача не знайдено.' })
+    @ApiOperation({ summary: 'Delete user by ID' })
+    @ApiResponse({ status: 200, description: 'User successfully deleted.' })
+    @ApiResponse({ status: 404, description: 'User not found.' })
     remove(@Param('id') id: string) {
-        return this.usersService.remove(id);
+      return this.usersService.remove(id);
     }
-
+  
     @Post(':id/reviews')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @HttpCode(HttpStatus.CREATED)
-    @ApiOperation({ summary: 'Додати відгук користувачу' })
-    @ApiResponse({ status: 201, description: 'Відгук успішно додано.' })
-    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
+    @ApiOperation({ summary: 'Add review for a user' })
+    @ApiResponse({ status: 201, description: 'Review successfully added.' })
+    @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async createReview(
-        @Param('id') userId: string,
-        @Body() createReviewDto: CreateReviewDto,
-        @AuthUser() user: any,
+      @Param('id') userId: string,
+      @Body() createReviewDto: CreateReviewDto,
+      @AuthUser() user: any,
     ) {
-        return this.usersService.createReview(userId, createReviewDto, user.id);
+      return this.usersService.createReview(userId, createReviewDto, user.sub);
     }
-
+  
     @Get('me/reviews')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
-    @ApiOperation({ summary: 'Отримати відгуки поточного користувача' })
-    @ApiResponse({ status: 200, description: 'Повертає список відгуків користувача.' })
-    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
+    @ApiOperation({ summary: 'Get current user reviews' })
+    @ApiResponse({ status: 200, description: 'Returns list of user reviews.' })
+    @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async getUserReviews(@AuthUser() user: any) {
-        return this.usersService.getUserReviews(user.id);
+      return this.usersService.getUserReviews(user.sub);
     }
-
+  
     @Post('friend-requests')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @HttpCode(HttpStatus.CREATED)
-    @ApiOperation({ summary: 'Надіслати запит на дружбу' })
-    @ApiResponse({ status: 201, description: 'Запит на дружбу успішно надіслано.' })
-    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
+    @ApiOperation({ summary: 'Send friend request' })
+    @ApiResponse({ status: 201, description: 'Friend request successfully sent.' })
+    @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async sendFriendRequest(@AuthUser() user: any, @Body('receiverId') receiverId: string) {
-        return this.usersService.createFriendRequest(user.id, receiverId);
+      return this.usersService.createFriendRequest(user.sub, receiverId);
     }
-
+  
     @Get('friend-requests/incoming')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
-    @ApiOperation({ summary: 'Отримати вхідні запити на дружбу' })
-    @ApiResponse({ status: 200, description: 'Повертає список вхідних запитів на дружбу.' })
-    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
+    @ApiOperation({ summary: 'Get incoming friend requests' })
+    @ApiResponse({ status: 200, description: 'Returns list of incoming friend requests.' })
+    @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async getIncomingFriendRequests(@AuthUser() user: any) {
-        return this.usersService.getIncomingFriendRequests(user.id);
+      return this.usersService.getIncomingFriendRequests(user.sub);
     }
-
+  
     @Patch('friend-requests/:id/accept')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @HttpCode(HttpStatus.OK)
-    @ApiOperation({ summary: 'Прийняти запит на дружбу' })
-    @ApiResponse({ status: 200, description: 'Запит на дружбу прийнято.' })
-    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
+    @ApiOperation({ summary: 'Accept friend request' })
+    @ApiResponse({ status: 200, description: 'Friend request accepted.' })
+    @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async acceptFriendRequest(@Param('id') requestId: string, @AuthUser() user: any) {
-        return this.usersService.acceptFriendRequest(requestId, user.id);
+      return this.usersService.acceptFriendRequest(requestId, user.sub);
     }
-
+  
     @Patch('friend-requests/:id/reject')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @HttpCode(HttpStatus.OK)
-    @ApiOperation({ summary: 'Відхилити запит на дружбу' })
-    @ApiResponse({ status: 200, description: 'Запит на дружбу відхилено.' })
-    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
+    @ApiOperation({ summary: 'Reject friend request' })
+    @ApiResponse({ status: 200, description: 'Friend request rejected.' })
+    @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async rejectFriendRequest(@Param('id') requestId: string, @AuthUser() user: any) {
-        return this.usersService.rejectFriendRequest(requestId, user.id);
+      return this.usersService.rejectFriendRequest(requestId, user.sub);
     }
-
+  
     @Get('me/friends')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
-    @ApiOperation({ summary: 'Отримати друзів поточного користувача' })
-    @ApiResponse({ status: 200, description: 'Повертає список друзів.' })
-    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
+    @ApiOperation({ summary: 'Get current user friends' })
+    @ApiResponse({ status: 200, description: 'Returns list of friends.' })
+    @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async getFriends(@AuthUser() user: any) {
-        return this.usersService.getFriends(user.id);
+      return this.usersService.getFriends(user.sub);
     }
-
+  
     @Get('me/friends-list')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
-    @ApiOperation({ summary: 'Отримати список друзів поточного користувача' })
-    @ApiResponse({ status: 200, description: 'Повертає список друзів користувача.' })
-    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
+    @ApiOperation({ summary: 'Get current user friends list' })
+    @ApiResponse({ status: 200, description: 'Returns list of friends.' })
+    @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async getFriendsList(@AuthUser() user: any) {
-        return this.usersService.getFriendsList(user.id);
+      return this.usersService.getFriendsList(user.sub);
     }
-
+  
     @Get('me/passengers')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
-    @ApiOperation({ summary: 'Отримати список пасажирів, з якими користувач їздив як водій' })
-    @ApiResponse({ status: 200, description: 'Повертає список пасажирів.' })
-    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
+    @ApiOperation({ summary: 'Get passengers for rides driven by the current user' })
+    @ApiResponse({ status: 200, description: 'Returns list of passengers.' })
+    @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async getPassengers(@AuthUser() user: any) {
-        return this.usersService.getPassengers(user.id);
+      return this.usersService.getPassengers(user.sub);
     }
-
+  
     @Get('me/drivers')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
-    @ApiOperation({ summary: 'Отримати список водіїв, з якими користувач їздив як пасажир' })
-    @ApiResponse({ status: 200, description: 'Повертає список водіїв.' })
-    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
+    @ApiOperation({ summary: 'Get drivers for rides where the current user was a passenger' })
+    @ApiResponse({ status: 200, description: 'Returns list of drivers.' })
+    @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async getDrivers(@AuthUser() user: any) {
-        return this.usersService.getDrivers(user.id);
+      return this.usersService.getDrivers(user.sub);
     }
-
+  
     @Delete('friends/:friendId')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @HttpCode(HttpStatus.OK)
-    @ApiOperation({ summary: 'Видалити користувача з друзів' })
-    @ApiResponse({ status: 200, description: 'Дружбу успішно розірвано.' })
-    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
-    @ApiResponse({ status: 404, description: 'Користувачі не є друзями.' })
+    @ApiOperation({ summary: 'Remove a friend' })
+    @ApiResponse({ status: 200, description: 'Friendship successfully terminated.' })
+    @ApiResponse({ status: 401, description: 'Unauthorized.' })
+    @ApiResponse({ status: 404, description: 'Users are not friends.' })
     async removeFriend(@Param('friendId') friendId: string, @AuthUser() user: any) {
-        return this.usersService.removeFriend(user.id, friendId);
+      return this.usersService.removeFriend(user.sub, friendId);
     }
-
+  
     @Get('search')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
-    @ApiOperation({ summary: 'Пошук користувачів за ім’ям або email з пагінацією та фільтром за категорією' })
-    @ApiResponse({ status: 200, description: 'Повертає список користувачів.' })
-    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
+    @ApiOperation({ summary: 'Search users by name or email with pagination and category filter' })
+    @ApiResponse({ status: 200, description: 'Returns list of users.' })
+    @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async searchUsers(@Query() queryDto: SearchUsersQueryDto, @AuthUser() user: any) {
-        return this.usersService.searchUsers(
-            queryDto.query,
-            user.id,
-            queryDto.category,
-            queryDto.limit,
-            queryDto.offset,
-        );
+      return this.usersService.searchUsers(
+        queryDto.query,
+        user.sub,
+        queryDto.category,
+        queryDto.limit,
+        queryDto.offset,
+      );
     }
-
+  
     @Post('me/booking-requests')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @HttpCode(HttpStatus.CREATED)
-    @ApiOperation({ summary: 'Створити запит на бронювання' })
-    @ApiResponse({ status: 201, description: 'Запит на бронювання успішно створено.' })
-    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
+    @ApiOperation({ summary: 'Create a booking request' })
+    @ApiResponse({ status: 201, description: 'Booking request successfully created.' })
+    @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async createBookingRequest(@Body('rideId') rideId: string, @AuthUser() user: any) {
-        return this.usersService.createBookingRequest(rideId, user.id);
+      return this.usersService.createBookingRequest(rideId, user.sub);
     }
-
+  
     @Get('me/booking-requests')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
-    @ApiOperation({ summary: 'Отримати запити на бронювання для водія' })
-    @ApiResponse({ status: 200, description: 'Повертає список запитів на бронювання.' })
-    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
+    @ApiOperation({ summary: 'Get booking requests for the driver' })
+    @ApiResponse({ status: 200, description: 'Returns list of booking requests.' })
+    @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async getBookingRequests(@AuthUser() user: any) {
-        return this.usersService.getBookingRequests(user.id);
+      return this.usersService.getBookingRequests(user.sub);
     }
-
+  
     @Post('booking-requests/:id/accept')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @HttpCode(HttpStatus.OK)
-    @ApiOperation({ summary: 'Прийняти запит на бронювання' })
-    @ApiResponse({ status: 200, description: 'Запит на бронювання прийнято.' })
-    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
+    @ApiOperation({ summary: 'Accept a booking request' })
+    @ApiResponse({ status: 200, description: 'Booking request accepted.' })
+    @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async acceptBookingRequest(@Param('id') bookingRequestId: string, @AuthUser() user: any) {
-        return this.usersService.acceptBookingRequest(bookingRequestId, user.id);
+      return this.usersService.acceptBookingRequest(bookingRequestId, user.sub);
     }
-
+  
     @Post('booking-requests/:id/reject')
     @UseGuards(JwtAuthGuard)
     @ApiBearerAuth()
     @HttpCode(HttpStatus.OK)
-    @ApiOperation({ summary: 'Відхилити запит на бронювання' })
-    @ApiResponse({ status: 200, description: 'Запит на бронювання відхилено.' })
-    @ApiResponse({ status: 401, description: 'Неавторизовано.' })
+    @ApiOperation({ summary: 'Reject a booking request' })
+    @ApiResponse({ status: 200, description: 'Booking request rejected.' })
+    @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async rejectBookingRequest(@Param('id') bookingRequestId: string, @AuthUser() user: any) {
-        return this.usersService.rejectBookingRequest(bookingRequestId, user.id);
+      return this.usersService.rejectBookingRequest(bookingRequestId, user.sub);
     }
-}
+  
+    @Post('confirm-cash-payment')
+    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({ summary: 'Confirm a cash payment by driver' })
+    @ApiResponse({ status: 200, description: 'Cash payment confirmed' })
+    @ApiResponse({ status: 400, description: 'Bad request' })
+    @ApiResponse({ status: 401, description: 'Unauthorized' })
+    async confirmCashPayment(@Body() confirmCashPaymentDto: ConfirmCashPaymentDto, @AuthUser() user: any) {
+      return this.usersService.confirmCashPayment(user.sub, confirmCashPaymentDto);
+    }
+  }

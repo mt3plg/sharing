@@ -1,17 +1,15 @@
-import { Injectable, NotFoundException, BadRequestException, Logger, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { SetupPaymentMethodDto, CreatePaymentDto, RequestPayoutDto, ConfirmCashPaymentDto } from './interfaces/interfaces_payment.interface';
 import Stripe from 'stripe';
 
 @Injectable()
 export class PaymentsService {
+  private readonly stripe: Stripe;
   private readonly logger = new Logger(PaymentsService.name);
-  private stripe: Stripe;
 
   constructor(private readonly prisma: PrismaService) {
-    this.stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-      apiVersion: '2025-04-30.basil',
-    });
+    this.stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-04-30.basil' });
   }
 
   async setupCustomer(userId: string): Promise<string> {
@@ -117,7 +115,7 @@ export class PaymentsService {
 
     const ride = await this.prisma.ride.findUnique({
       where: { id: rideId },
-      include: { driver: true, passenger: true },
+      include: { driver: true, passenger: true, payments: true },
     });
     if (!ride || !ride.driverId) {
       throw new NotFoundException('Ride or driver not found');
@@ -135,22 +133,19 @@ export class PaymentsService {
       throw new BadRequestException('Ride fare not set');
     }
 
-    const amount = Math.round(ride.fare * 100); // Конвертуємо в центи
+    // Перевірка наявності існуючого платежу
+    const existingPayment = ride.payments.find(p => p.userId === userId);
+    if (existingPayment && ['succeeded', 'pending'].includes(existingPayment.status)) {
+      throw new BadRequestException('Payment for this ride already exists');
+    }
+
+    const amount = Math.round(ride.fare * 100); // Конвертуємо в копійки
     const currency = 'uah';
     const commissionRate = parseFloat(process.env.PLATFORM_COMMISSION_RATE || '0.15');
     const commission = amount * commissionRate;
     const driverAmount = amount - commission;
 
-    // Перевіряємо, чи вже є платіж для цієї поїздки
-    const existingPayment = await this.prisma.payment.findFirst({
-      where: { rideId, userId },
-    });
-    if (existingPayment) {
-      throw new BadRequestException('Payment for this ride already exists');
-    }
-
     if (paymentMethod === 'cash') {
-      // Оплата готівкою: створюємо запис без Stripe
       const payment = await this.prisma.payment.create({
         data: {
           rideId,
@@ -168,10 +163,15 @@ export class PaymentsService {
       this.logger.log(`Created cash payment ${payment.id} for ride ${rideId}`);
       return { success: true, payment };
     } else if (paymentMethod === 'google_pay' || paymentMethod === 'apple_pay') {
-      // Оплата через Stripe (Google Pay або Apple Pay)
-      const user = await this.prisma.user.findUnique({ where: { id: userId } });
-      if (!user || !user.stripeCustomerId) {
-        throw new NotFoundException('User or Stripe customer not found');
+      let user = await this.prisma.user.findUnique({ where: { id: userId } });
+      if (!user) {
+        throw new NotFoundException('User not found');
+      }
+
+      // Автоматично створюємо Stripe-клієнта, якщо його немає
+      if (!user.stripeCustomerId) {
+        const customerId = await this.setupCustomer(userId);
+        user = await this.prisma.user.findUnique({ where: { id: userId } });
       }
 
       if (!ride.driver.stripeAccountId) {
@@ -186,7 +186,7 @@ export class PaymentsService {
         const paymentIntent = await this.stripe.paymentIntents.create({
           amount,
           currency,
-          customer: user.stripeCustomerId,
+          customer: user!.stripeCustomerId!,
           payment_method: paymentMethodId,
           off_session: true,
           confirm: true,
@@ -394,5 +394,45 @@ export class PaymentsService {
       where: { stripeAccountId: accountId },
       data: { /* оновіть статус акаунта водія, якщо потрібно */ },
     });
+  }
+
+  async handleWebhook(payload: any, signature: string, rawBody: Buffer) {
+    let event: Stripe.Event;
+    try {
+      event = this.stripe.webhooks.constructEvent(
+        rawBody,
+        signature,
+        process.env.STRIPE_WEBHOOK_SECRET!,
+      );
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      this.logger.error(`Webhook Error: ${errorMessage}`);
+      throw new BadRequestException('Webhook Error');
+    }
+
+    switch (event.type) {
+      case 'payment_intent.succeeded':
+        const paymentIntent = event.data.object as Stripe.PaymentIntent;
+        await this.updatePaymentStatus(paymentIntent.id, 'succeeded');
+        this.logger.log(`Payment succeeded: ${paymentIntent.id}`);
+        break;
+      case 'payment_intent.payment_failed':
+        const failedPaymentIntent = event.data.object as Stripe.PaymentIntent;
+        await this.updatePaymentStatus(failedPaymentIntent.id, 'failed');
+        this.logger.log(`Payment failed: ${failedPaymentIntent.id}`);
+        break;
+      case 'payout.created':
+        const payout = event.data.object as Stripe.Payout;
+        await this.updatePayoutStatus(payout.id, 'completed');
+        this.logger.log(`Payout created: ${payout.id}`);
+        break;
+      case 'payout.failed':
+        const failedPayout = event.data.object as Stripe.Payout;
+        await this.updatePayoutStatus(failedPayout.id, 'failed');
+        this.logger.log(`Payout failed: ${failedPayout.id}`);
+        break;
+      default:
+        this.logger.log(`Unhandled event type ${event.type}`);
+    }
   }
 }

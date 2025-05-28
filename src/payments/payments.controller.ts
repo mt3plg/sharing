@@ -1,30 +1,24 @@
-import { Controller, Post, Get, Body, Query, UseGuards, HttpCode, HttpStatus, Request, Logger } from '@nestjs/common';
+import { Controller, Post, Get, Body, Query, UseGuards, HttpCode, HttpStatus, Request } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import { SetupPaymentMethodDto, CreatePaymentDto, RequestPayoutDto, ConfirmCashPaymentDto } from './interfaces/interfaces_payment.interface';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser } from '../common/decorators/common_decorators_user.decorator';
-import Stripe from 'stripe';
-import { BadRequestException } from '@nestjs/common'; // Додаємо імпорт BadRequestException
+import { Logger, BadRequestException } from '@nestjs/common';
 
 @ApiTags('payments')
 @Controller('payments')
 export class PaymentsController {
-  private readonly stripe: Stripe;
-  private readonly logger = new Logger(PaymentsController.name); // Створюємо власний logger для PaymentsController
+  private readonly logger = new Logger(PaymentsController.name);
 
-  constructor(private readonly paymentsService: PaymentsService) {
-    this.stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-      apiVersion: '2025-04-30.basil',
-    });
-  }
+  constructor(private readonly paymentsService: PaymentsService) {}
 
   @Post('setup-customer')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Налаштування Stripe клієнта для пасажира' })
-  @ApiResponse({ status: 200, description: 'Клієнт успішно налаштований' })
+  @ApiOperation({ summary: 'Setup Stripe customer for passenger' })
+  @ApiResponse({ status: 200, description: 'Customer successfully set up' })
   async setupCustomer(@AuthUser() user: any) {
     return this.paymentsService.setupCustomer(user.sub);
   }
@@ -33,8 +27,8 @@ export class PaymentsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Налаштування Stripe Connect акаунта для водія' })
-  @ApiResponse({ status: 200, description: 'Акаунт водія успішно налаштований' })
+  @ApiOperation({ summary: 'Setup Stripe Connect account for driver' })
+  @ApiResponse({ status: 200, description: 'Driver account successfully set up' })
   async setupDriverAccount(@AuthUser() user: any) {
     return this.paymentsService.setupDriverAccount(user.sub);
   }
@@ -43,8 +37,8 @@ export class PaymentsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Додавання платіжного методу' })
-  @ApiResponse({ status: 201, description: 'Платіжний метод успішно додано' })
+  @ApiOperation({ summary: 'Add payment method' })
+  @ApiResponse({ status: 201, description: 'Payment method successfully added' })
   async addPaymentMethod(@Body() setupPaymentMethodDto: SetupPaymentMethodDto, @AuthUser() user: any) {
     return this.paymentsService.addPaymentMethod(user.sub, setupPaymentMethodDto);
   }
@@ -52,8 +46,8 @@ export class PaymentsController {
   @Get('methods')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Отримання платіжних методів користувача' })
-  @ApiResponse({ status: 200, description: 'Платіжні методи успішно отримано' })
+  @ApiOperation({ summary: 'Get user payment methods' })
+  @ApiResponse({ status: 200, description: 'Payment methods successfully retrieved' })
   async getPaymentMethods(@AuthUser() user: any) {
     return this.paymentsService.getPaymentMethods(user.sub);
   }
@@ -62,8 +56,8 @@ export class PaymentsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Створення платежу за поїздку' })
-  @ApiResponse({ status: 201, description: 'Платіж успішно створено' })
+  @ApiOperation({ summary: 'Create payment for a ride' })
+  @ApiResponse({ status: 201, description: 'Payment successfully created' })
   async createPayment(@Body() createPaymentDto: CreatePaymentDto, @AuthUser() user: any) {
     return this.paymentsService.createPayment(user.sub, createPaymentDto);
   }
@@ -72,10 +66,10 @@ export class PaymentsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Підтвердження оплати готівкою водієм' })
-  @ApiResponse({ status: 200, description: 'Оплату готівкою підтверджено' })
-  @ApiResponse({ status: 403, description: 'Заборонено' })
-  @ApiResponse({ status: 404, description: 'Платіж не знайдено' })
+  @ApiOperation({ summary: 'Confirm cash payment by driver' })
+  @ApiResponse({ status: 200, description: 'Cash payment confirmed' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Payment not found' })
   async confirmCashPayment(@Body() confirmCashPaymentDto: ConfirmCashPaymentDto, @AuthUser() user: any) {
     return this.paymentsService.confirmCashPayment(user.sub, confirmCashPaymentDto);
   }
@@ -83,8 +77,8 @@ export class PaymentsController {
   @Get('history')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Отримання історії платежів' })
-  @ApiResponse({ status: 200, description: 'Історія платежів успішно отримана' })
+  @ApiOperation({ summary: 'Get payment history' })
+  @ApiResponse({ status: 200, description: 'Payment history successfully retrieved' })
   async getPaymentHistory(
     @AuthUser() user: any,
     @Query('limit') limit: string = '10',
@@ -97,8 +91,8 @@ export class PaymentsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Запит на виплату для водія' })
-  @ApiResponse({ status: 201, description: 'Виплата успішно створена' })
+  @ApiOperation({ summary: 'Request payout for driver' })
+  @ApiResponse({ status: 201, description: 'Payout successfully created' })
   async requestPayout(@Body() requestPayoutDto: RequestPayoutDto, @AuthUser() user: any) {
     return this.paymentsService.requestPayout(user.sub, requestPayoutDto);
   }
@@ -106,8 +100,8 @@ export class PaymentsController {
   @Get('payout/history')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Отримання історії виплат' })
-  @ApiResponse({ status: 200, description: 'Історія виплат успішно отримана' })
+  @ApiOperation({ summary: 'Get payout history' })
+  @ApiResponse({ status: 200, description: 'Payout history successfully retrieved' })
   async getPayoutHistory(
     @AuthUser() user: any,
     @Query('limit') limit: string = '10',
@@ -118,51 +112,18 @@ export class PaymentsController {
 
   @Post('webhooks/stripe')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Обробка вебхуків від Stripe' })
-  @ApiResponse({ status: 200, description: 'Вебхук успішно оброблено' })
-  @ApiResponse({ status: 400, description: 'Невірний вебхук' })
+  @ApiOperation({ summary: 'Handle Stripe webhooks' })
+  @ApiResponse({ status: 200, description: 'Webhook successfully processed' })
+  @ApiResponse({ status: 400, description: 'Invalid webhook' })
   async handleWebhook(@Request() request: any, @Body() payload: any) {
     const sig = request.headers['stripe-signature'] as string;
-    let event: Stripe.Event;
-
     try {
-      event = this.stripe.webhooks.constructEvent(
-        request.rawBody || JSON.stringify(payload),
-        sig,
-        process.env.STRIPE_WEBHOOK_SECRET!
-      );
+      await this.paymentsService.handleWebhook(payload, sig, request.rawBody);
+      return { received: true };
     } catch (err) {
-      // Приводимо err до типу Error для безпечного доступу до message
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       this.logger.error(`Webhook Error: ${errorMessage}`);
       throw new BadRequestException('Webhook Error');
     }
-
-    switch (event.type) {
-      case 'payment_intent.succeeded':
-        const paymentIntent = event.data.object as Stripe.PaymentIntent;
-        await this.paymentsService.updatePaymentStatus(paymentIntent.id, 'succeeded');
-        this.logger.log(`Payment succeeded: ${paymentIntent.id}`);
-        break;
-      case 'payment_intent.payment_failed':
-        const failedPaymentIntent = event.data.object as Stripe.PaymentIntent;
-        await this.paymentsService.updatePaymentStatus(failedPaymentIntent.id, 'failed');
-        this.logger.log(`Payment failed: ${failedPaymentIntent.id}`);
-        break;
-      case 'payout.created':
-        const payout = event.data.object as Stripe.Payout;
-        await this.paymentsService.updatePayoutStatus(payout.id, 'completed');
-        this.logger.log(`Payout created: ${payout.id}`);
-        break;
-      case 'payout.failed':
-        const failedPayout = event.data.object as Stripe.Payout;
-        await this.paymentsService.updatePayoutStatus(failedPayout.id, 'failed');
-        this.logger.log(`Payout failed: ${failedPayout.id}`);
-        break;
-      default:
-        this.logger.log(`Unhandled event type ${event.type}`);
-    }
-
-    return { received: true };
   }
 }

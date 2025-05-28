@@ -5,24 +5,26 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { RidesModule } from './rides/rides.module';
 import { ConversationsModule } from './conversations/conversations.module';
-import { PaymentsModule } from './payments/payments.module'; 
+import { PaymentsModule } from './payments/payments.module';
 import { PrismaService } from './prisma.service';
+import { EmailModule } from './email/email.module';
 
 @Module({
-    imports: [
-        ConfigModule.forRoot({ isGlobal: true }),
-        ThrottlerModule.forRoot([
-            {
-                ttl: 60,
-                limit: 100,
-            },
-        ]),
-        AuthModule,
-        UsersModule,
-        RidesModule,
-        ConversationsModule,
-        PaymentsModule, 
-    ],
-    providers: [PrismaService],
+  imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60,
+        limit: 100,
+      },
+    ]),
+    AuthModule,
+    UsersModule,
+    RidesModule,
+    ConversationsModule,
+    PaymentsModule,
+    EmailModule,
+  ],
+  providers: [PrismaService],
 })
 export class AppModule {}

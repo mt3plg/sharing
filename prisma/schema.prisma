@@ -162,7 +162,7 @@ model Payment {
   currency              String
   paymentMethod         String // "cash", "google_pay", "apple_pay"
   status                String // "pending", "succeeded", "failed", "refunded"
-  isPaid                Boolean  @default(false) // Для готівки: чи підтверджено оплату
+  isPaid                Boolean  @default(false) // Для готівки: чи підтверджено водієм
   commission            Float?
   driverAmount          Float?
   createdAt             DateTime @default(now())

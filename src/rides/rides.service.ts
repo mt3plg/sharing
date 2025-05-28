@@ -95,8 +95,7 @@ export class RidesService {
         throw new Error(`Geocoding failed for address: ${address}`);
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Geocoding error: ${errorMessage}`);
+      this.logger.error(`Geocoding error: ${error}`);
       throw new BadRequestException(`Failed to geocode address: ${address}`);
     }
   }
@@ -459,7 +458,7 @@ export class RidesService {
     return this.prisma.$transaction(async (prisma) => {
       const ride = await prisma.ride.findUnique({
         where: { id: rideId },
-        include: { payments: true },
+        include: { payments: true, bookingRequests: { include: { passenger: true } } },
       });
 
       if (!ride) {
@@ -474,14 +473,17 @@ export class RidesService {
         throw new BadRequestException('Cannot change status of completed ride');
       }
 
-      // Якщо статус змінюється на "completed", перевіряємо оплату
+      // Якщо статус змінюється на "completed", перевіряємо оплату для всіх пасажирів
       if (status === 'completed') {
-        const payment = ride.payments[0];
-        if (!payment) {
-          throw new BadRequestException('Payment must be created before completing the ride');
-        }
-        if (payment.paymentMethod !== 'cash' && !payment.isPaid) {
-          throw new BadRequestException('Payment must be completed before marking the ride as completed');
+        const acceptedBookings = ride.bookingRequests.filter(br => br.status === 'accepted');
+        for (const booking of acceptedBookings) {
+          const payment = ride.payments.find(p => p.userId === booking.passengerId);
+          if (!payment) {
+            throw new BadRequestException(`No payment found for passenger ${booking.passengerId}`);
+          }
+          if (payment.paymentMethod !== 'cash' && !payment.isPaid) {
+            throw new BadRequestException(`Payment for passenger ${booking.passengerId} is not completed`);
+          }
         }
       }
 
@@ -497,10 +499,10 @@ export class RidesService {
     });
   }
 
-  async delete(rideId: string, userId: string) {
+  async delete(id: string, userId: string) {
     return this.prisma.$transaction(async (prisma) => {
       const ride = await prisma.ride.findUnique({
-        where: { id: rideId },
+        where: { id },
       });
 
       if (!ride) {
@@ -512,14 +514,14 @@ export class RidesService {
       }
 
       await prisma.bookingRequest.updateMany({
-        where: { rideId, status: 'pending' },
+        where: { rideId: id, status: 'pending' },
         data: { status: 'rejected' },
       });
 
-      await this.notifyPassengers(rideId, `Ride ${ride.startLocation} → ${ride.endLocation} has been cancelled`);
+      await this.notifyPassengers(id, `Ride ${ride.startLocation} → ${ride.endLocation} has been cancelled`);
 
       await prisma.ride.delete({
-        where: { id: rideId },
+        where: { id },
       });
 
       return { success: true, message: 'Ride deleted successfully' };
