@@ -15,6 +15,9 @@ import {
     HttpCode,
     HttpStatus,
     Query,
+    InternalServerErrorException,
+    UnauthorizedException,
+    Logger,
   } from '@nestjs/common';
   import { UsersService } from './users.service';
   import { CreateUserDto } from '../dto/create-user.dto';
@@ -31,6 +34,8 @@ import {
   @ApiTags('users')
   @Controller('users')
   export class UsersController {
+    private readonly logger = new Logger(UsersController.name);
+  
     constructor(private readonly usersService: UsersService) {}
   
     @Post()
@@ -47,8 +52,29 @@ import {
     @ApiOperation({ summary: 'Get current user data' })
     @ApiResponse({ status: 200, description: 'Returns user data.' })
     @ApiResponse({ status: 401, description: 'Unauthorized.' })
+    @ApiResponse({ status: 404, description: 'User not found.' })
+    @ApiResponse({ status: 500, description: 'Internal server error.' })
     async getCurrentUser(@Request() req) {
-      return this.usersService.findOne(req.user.sub);
+      try {
+        const userId = req.user?.sub;
+        if (!userId) {
+          this.logger.error('No user ID found in request');
+          throw new UnauthorizedException('Invalid user authentication');
+        }
+        this.logger.log(`Fetching current user with ID: ${userId}`);
+        const user = await this.usersService.findOne(userId);
+        if (!user) {
+          this.logger.warn(`User with ID ${userId} not found`);
+          throw new NotFoundException('User not found');
+        }
+        return user;
+      } catch (error) {
+        this.logger.error(`Error fetching current user: ${error}`, error);
+        if (error instanceof NotFoundException || error instanceof UnauthorizedException) {
+          throw error;
+        }
+        throw new InternalServerErrorException(`Failed to fetch current user: ${error}`);
+      }
     }
   
     @UseGuards(JwtAuthGuard)
@@ -58,7 +84,12 @@ import {
     @ApiResponse({ status: 200, description: 'User profile successfully updated.' })
     @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async updateProfile(@Request() req, @Body() updateUserDto: UpdateUserDto) {
-      return this.usersService.update(req.user.sub, updateUserDto);
+      const userId = req.user?.sub;
+      if (!userId) {
+        this.logger.error('No user ID found in request');
+        throw new UnauthorizedException('Invalid user authentication');
+      }
+      return this.usersService.update(userId, updateUserDto);
     }
   
     @UseGuards(JwtAuthGuard)
@@ -74,7 +105,12 @@ import {
       @Body('newPassword') newPassword: string,
       @Body('verificationCode') verificationCode: string,
     ) {
-      return this.usersService.changePassword(req.user.sub, req.user.email, currentPassword, newPassword, verificationCode);
+      const userId = req.user?.sub;
+      if (!userId) {
+        this.logger.error('No user ID found in request');
+        throw new UnauthorizedException('Invalid user authentication');
+      }
+      return this.usersService.changePassword(userId, req.user.email, currentPassword, newPassword, verificationCode);
     }
   
     @UseGuards(JwtAuthGuard)
@@ -84,7 +120,12 @@ import {
     @ApiResponse({ status: 200, description: 'User location successfully updated.' })
     @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async updateLocation(@Request() req, @Body() updateLocationDto: UpdateLocationDto) {
-      return this.usersService.updateLocation(req.user.sub, updateLocationDto);
+      const userId = req.user?.sub;
+      if (!userId) {
+        this.logger.error('No user ID found in request');
+        throw new UnauthorizedException('Invalid user authentication');
+      }
+      return this.usersService.updateLocation(userId, updateLocationDto);
     }
   
     @UseGuards(JwtAuthGuard)
@@ -97,6 +138,11 @@ import {
     @ApiResponse({ status: 400, description: 'Bad request.' })
     @UseInterceptors(FileInterceptor('avatar'))
     async uploadAvatar(@Request() req, @UploadedFile() file: Express.Multer.File) {
+      const userId = req.user?.sub;
+      if (!userId) {
+        this.logger.error('No user ID found in request');
+        throw new UnauthorizedException('Invalid user authentication');
+      }
       if (!file) {
         throw new BadRequestException('File not uploaded');
       }
@@ -104,7 +150,7 @@ import {
         throw new BadRequestException('File upload failed: filename is undefined');
       }
       const avatarPath = `/Uploads/avatars/${file.filename}`;
-      return this.usersService.updateAvatar(req.user.sub, avatarPath);
+      return this.usersService.updateAvatar(userId, avatarPath);
     }
   
     @Get(':id')
@@ -114,7 +160,12 @@ import {
     @ApiResponse({ status: 200, description: 'Returns user profile.' })
     @ApiResponse({ status: 404, description: 'User not found.' })
     async getUserProfile(@Param('id') userId: string, @AuthUser() user: any) {
-      return this.usersService.getUserProfile(userId, user.sub);
+      const requesterId = user?.sub;
+      if (!requesterId) {
+        this.logger.error('No requester ID found in request');
+        throw new UnauthorizedException('Invalid user authentication');
+      }
+      return this.usersService.getUserProfile(userId, requesterId);
     }
   
     @Patch(':id')
@@ -145,7 +196,12 @@ import {
       @Body() createReviewDto: CreateReviewDto,
       @AuthUser() user: any,
     ) {
-      return this.usersService.createReview(userId, createReviewDto, user.sub);
+      const authorId = user?.sub;
+      if (!authorId) {
+        this.logger.error('No author ID found in request');
+        throw new UnauthorizedException('Invalid user authentication');
+      }
+      return this.usersService.createReview(userId, createReviewDto, authorId);
     }
   
     @Get('me/reviews')
@@ -155,7 +211,12 @@ import {
     @ApiResponse({ status: 200, description: 'Returns list of user reviews.' })
     @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async getUserReviews(@AuthUser() user: any) {
-      return this.usersService.getUserReviews(user.sub);
+      const userId = user?.sub;
+      if (!userId) {
+        this.logger.error('No user ID found in request');
+        throw new UnauthorizedException('Invalid user authentication');
+      }
+      return this.usersService.getUserReviews(userId);
     }
   
     @Post('friend-requests')
@@ -166,7 +227,12 @@ import {
     @ApiResponse({ status: 201, description: 'Friend request successfully sent.' })
     @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async sendFriendRequest(@AuthUser() user: any, @Body('receiverId') receiverId: string) {
-      return this.usersService.createFriendRequest(user.sub, receiverId);
+      const senderId = user?.sub;
+      if (!senderId) {
+        this.logger.error('No sender ID found in request');
+        throw new UnauthorizedException('Invalid user authentication');
+      }
+      return this.usersService.createFriendRequest(senderId, receiverId);
     }
   
     @Get('friend-requests/incoming')
@@ -176,7 +242,12 @@ import {
     @ApiResponse({ status: 200, description: 'Returns list of incoming friend requests.' })
     @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async getIncomingFriendRequests(@AuthUser() user: any) {
-      return this.usersService.getIncomingFriendRequests(user.sub);
+      const userId = user?.sub;
+      if (!userId) {
+        this.logger.error('No user ID found in request');
+        throw new UnauthorizedException('Invalid user authentication');
+      }
+      return this.usersService.getIncomingFriendRequests(userId);
     }
   
     @Patch('friend-requests/:id/accept')
@@ -187,7 +258,12 @@ import {
     @ApiResponse({ status: 200, description: 'Friend request accepted.' })
     @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async acceptFriendRequest(@Param('id') requestId: string, @AuthUser() user: any) {
-      return this.usersService.acceptFriendRequest(requestId, user.sub);
+      const userId = user?.sub;
+      if (!userId) {
+        this.logger.error('No user ID found in request');
+        throw new UnauthorizedException('Invalid user authentication');
+      }
+      return this.usersService.acceptFriendRequest(requestId, userId);
     }
   
     @Patch('friend-requests/:id/reject')
@@ -198,7 +274,12 @@ import {
     @ApiResponse({ status: 200, description: 'Friend request rejected.' })
     @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async rejectFriendRequest(@Param('id') requestId: string, @AuthUser() user: any) {
-      return this.usersService.rejectFriendRequest(requestId, user.sub);
+      const userId = user?.sub;
+      if (!userId) {
+        this.logger.error('No user ID found in request');
+        throw new UnauthorizedException('Invalid user authentication');
+      }
+      return this.usersService.rejectFriendRequest(requestId, userId);
     }
   
     @Get('me/friends')
@@ -208,7 +289,12 @@ import {
     @ApiResponse({ status: 200, description: 'Returns list of friends.' })
     @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async getFriends(@AuthUser() user: any) {
-      return this.usersService.getFriends(user.sub);
+      const userId = user?.sub;
+      if (!userId) {
+        this.logger.error('No user ID found in request');
+        throw new UnauthorizedException('Invalid user authentication');
+      }
+      return this.usersService.getFriends(userId);
     }
   
     @Get('me/friends-list')
@@ -218,7 +304,12 @@ import {
     @ApiResponse({ status: 200, description: 'Returns list of friends.' })
     @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async getFriendsList(@AuthUser() user: any) {
-      return this.usersService.getFriendsList(user.sub);
+      const userId = user?.sub;
+      if (!userId) {
+        this.logger.error('No user ID found in request');
+        throw new UnauthorizedException('Invalid user authentication');
+      }
+      return this.usersService.getFriendsList(userId);
     }
   
     @Get('me/passengers')
@@ -228,7 +319,12 @@ import {
     @ApiResponse({ status: 200, description: 'Returns list of passengers.' })
     @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async getPassengers(@AuthUser() user: any) {
-      return this.usersService.getPassengers(user.sub);
+      const userId = user?.sub;
+      if (!userId) {
+        this.logger.error('No user ID found in request');
+        throw new UnauthorizedException('Invalid user authentication');
+      }
+      return this.usersService.getPassengers(userId);
     }
   
     @Get('me/drivers')
@@ -238,7 +334,12 @@ import {
     @ApiResponse({ status: 200, description: 'Returns list of drivers.' })
     @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async getDrivers(@AuthUser() user: any) {
-      return this.usersService.getDrivers(user.sub);
+      const userId = user?.sub;
+      if (!userId) {
+        this.logger.error('No user ID found in request');
+        throw new UnauthorizedException('Invalid user authentication');
+      }
+      return this.usersService.getDrivers(userId);
     }
   
     @Delete('friends/:friendId')
@@ -250,7 +351,12 @@ import {
     @ApiResponse({ status: 401, description: 'Unauthorized.' })
     @ApiResponse({ status: 404, description: 'Users are not friends.' })
     async removeFriend(@Param('friendId') friendId: string, @AuthUser() user: any) {
-      return this.usersService.removeFriend(user.sub, friendId);
+      const userId = user?.sub;
+      if (!userId) {
+        this.logger.error('No user ID found in request');
+        throw new UnauthorizedException('Invalid user authentication');
+      }
+      return this.usersService.removeFriend(userId, friendId);
     }
   
     @Get('search')
@@ -260,9 +366,14 @@ import {
     @ApiResponse({ status: 200, description: 'Returns list of users.' })
     @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async searchUsers(@Query() queryDto: SearchUsersQueryDto, @AuthUser() user: any) {
+      const userId = user?.sub;
+      if (!userId) {
+        this.logger.error('No user ID found in request');
+        throw new UnauthorizedException('Invalid user authentication');
+      }
       return this.usersService.searchUsers(
         queryDto.query,
-        user.sub,
+        userId,
         queryDto.category,
         queryDto.limit,
         queryDto.offset,
@@ -277,7 +388,12 @@ import {
     @ApiResponse({ status: 201, description: 'Booking request successfully created.' })
     @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async createBookingRequest(@Body('rideId') rideId: string, @AuthUser() user: any) {
-      return this.usersService.createBookingRequest(rideId, user.sub);
+      const userId = user?.sub;
+      if (!userId) {
+        this.logger.error('No user ID found in request');
+        throw new UnauthorizedException('Invalid user authentication');
+      }
+      return this.usersService.createBookingRequest(rideId, userId);
     }
   
     @Get('me/booking-requests')
@@ -287,7 +403,12 @@ import {
     @ApiResponse({ status: 200, description: 'Returns list of booking requests.' })
     @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async getBookingRequests(@AuthUser() user: any) {
-      return this.usersService.getBookingRequests(user.sub);
+      const userId = user?.sub;
+      if (!userId) {
+        this.logger.error('No user ID found in request');
+        throw new UnauthorizedException('Invalid user authentication');
+      }
+      return this.usersService.getBookingRequests(userId);
     }
   
     @Post('booking-requests/:id/accept')
@@ -298,7 +419,12 @@ import {
     @ApiResponse({ status: 200, description: 'Booking request accepted.' })
     @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async acceptBookingRequest(@Param('id') bookingRequestId: string, @AuthUser() user: any) {
-      return this.usersService.acceptBookingRequest(bookingRequestId, user.sub);
+      const userId = user?.sub;
+      if (!userId) {
+        this.logger.error('No user ID found in request');
+        throw new UnauthorizedException('Invalid user authentication');
+      }
+      return this.usersService.acceptBookingRequest(bookingRequestId, userId);
     }
   
     @Post('booking-requests/:id/reject')
@@ -309,7 +435,12 @@ import {
     @ApiResponse({ status: 200, description: 'Booking request rejected.' })
     @ApiResponse({ status: 401, description: 'Unauthorized.' })
     async rejectBookingRequest(@Param('id') bookingRequestId: string, @AuthUser() user: any) {
-      return this.usersService.rejectBookingRequest(bookingRequestId, user.sub);
+      const userId = user?.sub;
+      if (!userId) {
+        this.logger.error('No user ID found in request');
+        throw new UnauthorizedException('Invalid user authentication');
+      }
+      return this.usersService.rejectBookingRequest(bookingRequestId, userId);
     }
   
     @Post('confirm-cash-payment')
@@ -321,6 +452,11 @@ import {
     @ApiResponse({ status: 400, description: 'Bad request' })
     @ApiResponse({ status: 401, description: 'Unauthorized' })
     async confirmCashPayment(@Body() confirmCashPaymentDto: ConfirmCashPaymentDto, @AuthUser() user: any) {
-      return this.usersService.confirmCashPayment(user.sub, confirmCashPaymentDto);
+      const userId = user?.sub;
+      if (!userId) {
+        this.logger.error('No user ID found in request');
+        throw new UnauthorizedException('Invalid user authentication');
+      }
+      return this.usersService.confirmCashPayment(userId, confirmCashPaymentDto);
     }
   }
