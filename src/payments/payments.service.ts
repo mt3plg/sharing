@@ -453,4 +453,33 @@ export class PaymentsService {
         this.logger.log(`Unhandled event type ${event.type}`);
     }
   }
+
+  async deletePaymentMethod(userId: string, paymentMethodId: string) {
+    this.logger.log(`Deleting payment method ${paymentMethodId} for user ${userId}`);
+  
+    const paymentMethod = await this.prisma.paymentMethod.findUnique({
+      where: { id: paymentMethodId },
+    });
+  
+    if (!paymentMethod || paymentMethod.userId !== userId) {
+      this.logger.error(`Payment method ${paymentMethodId} not found or does not belong to user ${userId}`);
+      throw new NotFoundException('Payment method not found');
+    }
+  
+    try {
+      // Від’єднати платіжний метод від Stripe
+      await this.stripe.paymentMethods.detach(paymentMethod.stripePaymentMethodId);
+  
+      // Видалити з бази даних
+      await this.prisma.paymentMethod.delete({
+        where: { id: paymentMethodId },
+      });
+  
+      this.logger.log(`Deleted payment method ${paymentMethodId} for user ${userId}`);
+      return { success: true };
+    } catch (error) {
+      this.logger.error(`Failed to delete payment method: ${error}`, error);
+      throw new BadRequestException(`Failed to delete payment method: ${error}`);
+    }
+  }
 }

@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Query, UseGuards, HttpCode, HttpStatus, Request, Logger, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Get, Body, Query, UseGuards, HttpCode, HttpStatus, Request, Logger, BadRequestException, Delete, Param } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import { SetupPaymentMethodDto, CreatePaymentDto, RequestPayoutDto, ConfirmCashPaymentDto } from './interfaces/interfaces_payment.interface';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
@@ -152,4 +152,19 @@ export class PaymentsController {
       throw new BadRequestException(`Webhook error: ${errorMessage}`);
     }
   }
+
+  @Delete('method/:id')
+@UseGuards(JwtAuthGuard)
+@ApiBearerAuth()
+@HttpCode(HttpStatus.OK)
+@ApiOperation({ summary: 'Delete payment method' })
+@ApiResponse({ status: 200, description: 'Payment method successfully deleted' })
+@ApiResponse({ status: 400, description: 'Bad request' })
+@ApiResponse({ status: 401, description: 'Unauthorized' })
+@ApiResponse({ status: 404, description: 'Payment method not found' })
+async deletePaymentMethod(@Param('id') paymentMethodId: string, @Request() req) {
+  const userId = req.user?.id;
+  this.logger.log(`Deleting payment method ${paymentMethodId} for user ${userId}`);
+  return this.paymentsService.deletePaymentMethod(userId, paymentMethodId);
+}
 }
