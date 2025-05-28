@@ -1,10 +1,8 @@
-import { Controller, Post, Get, Body, Query, UseGuards, HttpCode, HttpStatus, Request } from '@nestjs/common';
+import { Controller, Post, Get, Body, Query, UseGuards, HttpCode, HttpStatus, Request, Logger } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import { SetupPaymentMethodDto, CreatePaymentDto, RequestPayoutDto, ConfirmCashPaymentDto } from './interfaces/interfaces_payment.interface';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { AuthUser } from '../common/decorators/common_decorators_user.decorator';
-import { Logger, BadRequestException } from '@nestjs/common';
 
 @ApiTags('payments')
 @Controller('payments')
@@ -19,8 +17,11 @@ export class PaymentsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Setup Stripe customer for passenger' })
   @ApiResponse({ status: 200, description: 'Customer successfully set up' })
-  async setupCustomer(@AuthUser() user: any) {
-    return this.paymentsService.setupCustomer(user.sub);
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async setupCustomer(@Request() req) {
+    const userId = req.user?.id;
+    this.logger.log(`Setting up Stripe customer for user ${userId}`);
+    return this.paymentsService.setupCustomer(userId);
   }
 
   @Post('setup-driver')
@@ -29,8 +30,11 @@ export class PaymentsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Setup Stripe Connect account for driver' })
   @ApiResponse({ status: 200, description: 'Driver account successfully set up' })
-  async setupDriverAccount(@AuthUser() user: any) {
-    return this.paymentsService.setupDriverAccount(user.sub);
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async setupDriverAccount(@Request() req) {
+    const userId = req.user?.id;
+    this.logger.log(`Setting up Stripe Connect account for user ${userId}`);
+    return this.paymentsService.setupDriverAccount(userId);
   }
 
   @Post('method')
@@ -39,8 +43,12 @@ export class PaymentsController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Add payment method' })
   @ApiResponse({ status: 201, description: 'Payment method successfully added' })
-  async addPaymentMethod(@Body() setupPaymentMethodDto: SetupPaymentMethodDto, @AuthUser() user: any) {
-    return this.paymentsService.addPaymentMethod(user.sub, setupPaymentMethodDto);
+  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async addPaymentMethod(@Body() setupPaymentMethodDto: SetupPaymentMethodDto, @Request() req) {
+    const userId = req.user?.id;
+    this.logger.log(`Adding payment method for user ${userId}: ${JSON.stringify(setupPaymentMethodDto)}`);
+    return this.paymentsService.addPaymentMethod(userId, setupPaymentMethodDto);
   }
 
   @Get('methods')
@@ -48,8 +56,11 @@ export class PaymentsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get user payment methods' })
   @ApiResponse({ status: 200, description: 'Payment methods successfully retrieved' })
-  async getPaymentMethods(@AuthUser() user: any) {
-    return this.paymentsService.getPaymentMethods(user.sub);
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async getPaymentMethods(@Request() req) {
+    const userId = req.user?.id;
+    this.logger.log(`Fetching payment methods for user ${userId}`);
+    return this.paymentsService.getPaymentMethods(userId);
   }
 
   @Post('ride')

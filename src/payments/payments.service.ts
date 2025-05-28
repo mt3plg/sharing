@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { SetupPaymentMethodDto, CreatePaymentDto, RequestPayoutDto, ConfirmCashPaymentDto } from './interfaces/interfaces_payment.interface';
+import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
 
 @Injectable()
@@ -8,17 +9,29 @@ export class PaymentsService {
   private readonly stripe: Stripe;
   private readonly logger = new Logger(PaymentsService.name);
 
-  constructor(private readonly prisma: PrismaService) {
-    this.stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-04-30.basil' });
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
+  ) {
+    const stripeSecretKey = this.configService.get<string>('STRIPE_SECRET_KEY');
+    if (!stripeSecretKey) {
+      this.logger.error('STRIPE_SECRET_KEY is not defined in environment variables');
+      throw new Error('STRIPE_SECRET_KEY is not defined in environment variables');
+    }
+    this.logger.log('Initializing Stripe with STRIPE_SECRET_KEY:', stripeSecretKey.substring(0, 8) + '...');
+    this.stripe = new Stripe(stripeSecretKey, { apiVersion: '2025-04-30.basil' });
   }
 
   async setupCustomer(userId: string): Promise<string> {
+    this.logger.log(`Setting up Stripe customer for user ${userId}`);
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
+      this.logger.error(`User ${userId} not found`);
       throw new NotFoundException('User not found');
     }
 
     if (user.stripeCustomerId) {
+      this.logger.log(`User ${userId} already has Stripe customer ID: ${user.stripeCustomerId}`);
       return user.stripeCustomerId;
     }
 
@@ -37,12 +50,15 @@ export class PaymentsService {
   }
 
   async setupDriverAccount(userId: string): Promise<string> {
+    this.logger.log(`Setting up Stripe Connect account for user ${userId}`);
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
+      this.logger.error(`User ${userId} not found`);
       throw new NotFoundException('User not found');
     }
 
     if (user.stripeAccountId) {
+      this.logger.log(`User ${userId} already has Stripe account ID: ${user.stripeAccountId}`);
       return user.stripeAccountId;
     }
 
@@ -66,9 +82,11 @@ export class PaymentsService {
 
   async addPaymentMethod(userId: string, setupPaymentMethodDto: SetupPaymentMethodDto) {
     const { paymentMethodId } = setupPaymentMethodDto;
+    this.logger.log(`Adding payment method ${paymentMethodId} for user ${userId}`);
 
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user || !user.stripeCustomerId) {
+      this.logger.error(`User ${userId} or Stripe customer not found`);
       throw new NotFoundException('User or Stripe customer not found');
     }
 
@@ -90,8 +108,8 @@ export class PaymentsService {
       this.logger.log(`Added payment method ${paymentMethod.id} for user ${userId}`);
       return { success: true, paymentMethodId: paymentMethod.id };
     } catch (error) {
-      this.logger.error(`Failed to add payment method: ${error}`);
-      throw new BadRequestException('Failed to add payment method');
+      this.logger.error(`Failed to add payment method: ${error}`, error);
+      throw new BadRequestException(`Failed to add payment method: ${error}`);
     }
   }
 
