@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, ForbiddenException, BadRequestException,
 import { PrismaService } from '../prisma.service';
 import { CreateRideDto, SearchRideDto } from './interfaces/interfaces_ride.interface';
 import { EmailService } from '../email/email.service';
-import { Client, DistanceMatrixRequest } from '@googlemaps/google-maps-services-js';
+import { Client, DistanceMatrixRequest, TravelMode } from '@googlemaps/google-maps-services-js';
 import { PaymentsService } from '../payments/payments.service';
 
 export interface FilteredRide {
@@ -53,7 +53,7 @@ export class RidesService {
           origins: [startLocation],
           destinations: [endLocation],
           key: process.env.GOOGLE_MAPS_API_KEY!,
-          mode: 'driving',
+          mode: TravelMode.driving,
         },
       };
 

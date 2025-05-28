@@ -10,7 +10,7 @@ export class PaymentsService {
 
   constructor(private readonly prisma: PrismaService) {
     this.stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-      apiVersion: '2023-10-16',
+      apiVersion: '2025-04-30.basil', 
     });
   }
 
@@ -269,5 +269,51 @@ export class PaymentsService {
     const total = await this.prisma.payout.count({ where: { userId } });
 
     return { success: true, payouts, total };
+  }
+
+  async updatePaymentStatus(paymentIntentId: string, status: string) {
+    const payment = await this.prisma.payment.findFirst({
+      where: { stripePaymentIntentId: paymentIntentId },
+    });
+    if (!payment) {
+      throw new NotFoundException('Payment not found');
+    }
+    await this.prisma.payment.update({
+      where: { id: payment.id },
+      data: { status },
+    });
+  }
+
+  async updatePayoutStatus(payoutId: string, status: string) {
+    const payout = await this.prisma.payout.findFirst({
+      where: { stripePayoutId: payoutId },
+    });
+    if (!payout) {
+      throw new NotFoundException('Payout not found');
+    }
+    await this.prisma.payout.update({
+      where: { id: payout.id },
+      data: { status },
+    });
+  }
+
+  async handleRefund(chargeId: string) {
+    const payment = await this.prisma.payment.findFirst({
+      where: { stripePaymentIntentId: chargeId },
+    });
+    if (!payment) {
+      throw new NotFoundException('Payment not found');
+    }
+    await this.prisma.payment.update({
+      where: { id: payment.id },
+      data: { status: 'refunded' },
+    });
+  }
+
+  async updateDriverAccount(accountId: string, account: Stripe.Account) {
+    await this.prisma.user.updateMany({
+      where: { stripeAccountId: accountId },
+      data: { /* оновіть статус акаунта водія, якщо потрібно */ },
+    });
   }
 }
