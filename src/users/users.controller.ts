@@ -205,20 +205,22 @@ async getCurrentUser(@Request() req) {
       return this.usersService.createReview(userId, createReviewDto, authorId);
     }
   
-    @Get('me/reviews')
     @UseGuards(JwtAuthGuard)
-    @ApiBearerAuth()
-    @ApiOperation({ summary: 'Get current user reviews' })
-    @ApiResponse({ status: 200, description: 'Returns list of user reviews.' })
-    @ApiResponse({ status: 401, description: 'Unauthorized.' })
-    async getUserReviews(@AuthUser() user: any) {
-      const userId = user?.sub;
-      if (!userId) {
-        this.logger.error('No user ID found in request');
-        throw new UnauthorizedException('Invalid user authentication');
-      }
-      return this.usersService.getUserReviews(userId);
-    }
+@ApiBearerAuth()
+@Get('me/reviews')
+@ApiOperation({ summary: 'Отримати відгуки поточного користувача' })
+@ApiResponse({ status: 200, description: 'Повертає список відгуків користувача.' })
+@ApiResponse({ status: 401, description: 'Неавторизовано.' })
+async getUserReviews(@Request() req) {
+  this.logger.log(`Request user: ${JSON.stringify(req.user)}`);
+  const userId = req.user?.id;
+  if (!userId) {
+    this.logger.error('No user ID found in request');
+    throw new UnauthorizedException('Invalid user authentication');
+  }
+  this.logger.log(`Fetching reviews for user with ID: ${userId}`);
+  return this.usersService.getUserReviews(userId);
+}
   
     @Post('friend-requests')
     @UseGuards(JwtAuthGuard)

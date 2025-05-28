@@ -21,7 +21,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       ignoreExpiration: false,
       secretOrKey: secret,
     });
-    this.logger.log(`Using JWT_SECRET: ${secret}`); // Перенесено після super
+    this.logger.log(`Initialized with JWT_SECRET: ${secret}`);
   }
 
   async validate(payload: { sub: string; email: string }) {
@@ -35,6 +35,8 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       this.logger.error(`User not found for ID: ${payload.sub}`);
       throw new UnauthorizedException('User not found');
     }
-    return { id: user.id, email: user.email }; // Повертаємо { id, email }
+    const result = { id: user.id, email: user.email };
+    this.logger.log(`Returning user data: ${JSON.stringify(result)}`);
+    return result;
   }
 }
