@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Query, UseGuards, HttpCode, HttpStatus, Request, Logger } from '@nestjs/common';
+import { Controller, Post, Get, Body, Query, UseGuards, HttpCode, HttpStatus, Request, Logger, BadRequestException } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import { SetupPaymentMethodDto, CreatePaymentDto, RequestPayoutDto, ConfirmCashPaymentDto } from './interfaces/interfaces_payment.interface';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
@@ -69,8 +69,11 @@ export class PaymentsController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Create payment for a ride' })
   @ApiResponse({ status: 201, description: 'Payment successfully created' })
-  async createPayment(@Body() createPaymentDto: CreatePaymentDto, @AuthUser() user: any) {
-    return this.paymentsService.createPayment(user.sub, createPaymentDto);
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async createPayment(@Body() createPaymentDto: CreatePaymentDto, @Request() req) {
+    const userId = req.user?.id;
+    this.logger.log(`Creating payment for user ${userId}: ${JSON.stringify(createPaymentDto)}`);
+    return this.paymentsService.createPayment(userId, createPaymentDto);
   }
 
   @Post('confirm-cash')
@@ -81,8 +84,10 @@ export class PaymentsController {
   @ApiResponse({ status: 200, description: 'Cash payment confirmed' })
   @ApiResponse({ status: 403, description: 'Forbidden' })
   @ApiResponse({ status: 404, description: 'Payment not found' })
-  async confirmCashPayment(@Body() confirmCashPaymentDto: ConfirmCashPaymentDto, @AuthUser() user: any) {
-    return this.paymentsService.confirmCashPayment(user.sub, confirmCashPaymentDto);
+  async confirmCashPayment(@Body() confirmCashPaymentDto: ConfirmCashPaymentDto, @Request() req) {
+    const userId = req.user?.id;
+    this.logger.log(`Confirming cash payment for user ${userId}: ${JSON.stringify(confirmCashPaymentDto)}`);
+    return this.paymentsService.confirmCashPayment(userId, confirmCashPaymentDto);
   }
 
   @Get('history')
@@ -90,12 +95,15 @@ export class PaymentsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get payment history' })
   @ApiResponse({ status: 200, description: 'Payment history successfully retrieved' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getPaymentHistory(
-    @AuthUser() user: any,
+    @Request() req,
     @Query('limit') limit: string = '10',
     @Query('offset') offset: string = '0',
   ) {
-    return this.paymentsService.getPaymentHistory(user.sub, parseInt(limit), parseInt(offset));
+    const userId = req.user?.id;
+    this.logger.log(`Fetching payment history for user ${userId} with limit ${limit}, offset ${offset}`);
+    return this.paymentsService.getPaymentHistory(userId, parseInt(limit), parseInt(offset));
   }
 
   @Post('payout')
@@ -104,8 +112,11 @@ export class PaymentsController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Request payout for driver' })
   @ApiResponse({ status: 201, description: 'Payout successfully created' })
-  async requestPayout(@Body() requestPayoutDto: RequestPayoutDto, @AuthUser() user: any) {
-    return this.paymentsService.requestPayout(user.sub, requestPayoutDto);
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  async requestPayout(@Body() requestPayoutDto: RequestPayoutDto, @Request() req) {
+    const userId = req.user?.id;
+    this.logger.log(`Requesting payout for user ${userId}: ${JSON.stringify(requestPayoutDto)}`);
+    return this.paymentsService.requestPayout(userId, requestPayoutDto);
   }
 
   @Get('payout/history')
@@ -113,12 +124,15 @@ export class PaymentsController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get payout history' })
   @ApiResponse({ status: 200, description: 'Payout history successfully retrieved' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getPayoutHistory(
-    @AuthUser() user: any,
+    @Request() req,
     @Query('limit') limit: string = '10',
     @Query('offset') offset: string = '0',
   ) {
-    return this.paymentsService.getPayoutHistory(user.sub, parseInt(limit), parseInt(offset));
+    const userId = req.user?.id;
+    this.logger.log(`Fetching payout history for user ${userId} with limit ${limit}, offset ${offset}`);
+    return this.paymentsService.getPayoutHistory(userId, parseInt(limit), parseInt(offset));
   }
 
   @Post('webhooks/stripe')
@@ -129,12 +143,13 @@ export class PaymentsController {
   async handleWebhook(@Request() request: any, @Body() payload: any) {
     const sig = request.headers['stripe-signature'] as string;
     try {
+      this.logger.log('Processing Stripe webhook');
       await this.paymentsService.handleWebhook(payload, sig, request.rawBody);
       return { received: true };
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      this.logger.error(`Webhook Error: ${errorMessage}`);
-      throw new BadRequestException('Webhook Error');
+      this.logger.error(`Webhook error: ${errorMessage}`);
+      throw new BadRequestException(`Webhook error: ${errorMessage}`);
     }
   }
 }
