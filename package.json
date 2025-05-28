@@ -22,6 +22,7 @@
     "prisma:migrate": "npx prisma migrate deploy"
   },
   "dependencies": {
+    "@googlemaps/google-maps-services-js": "^3.4.1",
     "@nestjs/cli": "^11.0.7",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",
@@ -55,6 +56,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "socket.io-client": "^4.8.1",
+    "stripe": "^18.1.1",
     "uuid": "^11.1.0"
   },
   "devDependencies": {

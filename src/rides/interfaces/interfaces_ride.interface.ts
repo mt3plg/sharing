@@ -1,5 +1,5 @@
-import { IsString, IsNotEmpty, IsInt, Min, IsDateString, IsOptional, IsNumber } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { IsString, IsNotEmpty, IsInt, Min, IsDateString, IsOptional, IsNumber } from 'class-validator';
 
 export class CreateRideDto {
   @ApiProperty({ example: 'Kyiv, Ukraine', description: 'The starting location of the ride' })
@@ -12,13 +12,15 @@ export class CreateRideDto {
   @IsNotEmpty()
   endLocation!: string;
 
-  @ApiProperty({ example: '2025-05-07T10:00:00Z', description: 'The departure time of the ride' })
+  @ApiProperty({ example: '2025-05-28T10:00:00Z', description: 'The departure time of the ride' })
   @IsDateString()
+  @IsNotEmpty()
   departureTime!: string;
 
   @ApiProperty({ example: 4, description: 'The number of available seats' })
   @IsInt()
   @Min(1)
+  @IsNotEmpty()
   availableSeats!: number;
 
   @ApiProperty({ example: 'Sedan', description: 'The type of vehicle', required: false })
@@ -44,13 +46,15 @@ export class SearchRideDto {
   @IsNotEmpty()
   endLocation!: string;
 
-  @ApiProperty({ example: '2025-05-07', description: 'The departure date to search for (YYYY-MM-DD)' })
+  @ApiProperty({ example: '2025-05-28', description: 'The departure date to search for (YYYY-MM-DD)' })
   @IsDateString()
+  @IsNotEmpty()
   departureTime!: string;
 
   @ApiProperty({ example: 2, description: 'The number of passengers' })
   @IsInt()
   @Min(1)
+  @IsNotEmpty()
   passengers!: number;
 
   @ApiProperty({ example: 2, description: 'The date range in days (±days)', required: false })

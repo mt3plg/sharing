@@ -25,19 +25,19 @@ export class RidesController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Create a new ride' })
-  @ApiResponse({ status: 201, description: 'Ride created successfully' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiOperation({ summary: 'Створити нову поїздку' })
+  @ApiResponse({ status: 201, description: 'Поїздка успішно створена' })
+  @ApiResponse({ status: 401, description: 'Неавторизовано' })
+  @ApiResponse({ status: 400, description: 'Невірний запит' })
   async create(@Body() createRideDto: CreateRideDto, @AuthUser() user: any) {
     return this.ridesService.create(createRideDto, user.id);
   }
 
   @Post('search')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Search for rides' })
-  @ApiResponse({ status: 200, description: 'Rides found successfully' })
-  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiOperation({ summary: 'Пошук поїздок' })
+  @ApiResponse({ status: 200, description: 'Поїздки успішно знайдено' })
+  @ApiResponse({ status: 400, description: 'Невірний запит' })
   async search(@Body() searchRideDto: SearchRideDto): Promise<{ success: boolean; rides: FilteredRide[]; total: number }> {
     return this.ridesService.search(searchRideDto);
   }
@@ -45,9 +45,9 @@ export class RidesController {
   @Get()
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get all rides for the current user' })
-  @ApiResponse({ status: 200, description: 'Rides retrieved successfully' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiOperation({ summary: 'Отримати всі поїздки поточного користувача' })
+  @ApiResponse({ status: 200, description: 'Поїздки успішно отримано' })
+  @ApiResponse({ status: 401, description: 'Неавторизовано' })
   async findAll(@AuthUser() user: any) {
     return this.ridesService.findAll(user.id);
   }
@@ -55,10 +55,10 @@ export class RidesController {
   @Get(':id')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get a ride by ID' })
-  @ApiResponse({ status: 200, description: 'Ride retrieved successfully' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 404, description: 'Ride not found' })
+  @ApiOperation({ summary: 'Отримати поїздку за ID' })
+  @ApiResponse({ status: 200, description: 'Поїздка успішно отримана' })
+  @ApiResponse({ status: 401, description: 'Неавторизовано' })
+  @ApiResponse({ status: 404, description: 'Поїздку не знайдено' })
   async findOne(@Param('id') id: string) {
     return this.ridesService.findOne(id);
   }
@@ -67,11 +67,11 @@ export class RidesController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Update a ride by ID' })
-  @ApiResponse({ status: 200, description: 'Ride updated successfully' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden' })
-  @ApiResponse({ status: 404, description: 'Ride not found' })
+  @ApiOperation({ summary: 'Оновити поїздку за ID' })
+  @ApiResponse({ status: 200, description: 'Поїздка успішно оновлена' })
+  @ApiResponse({ status: 401, description: 'Неавторизовано' })
+  @ApiResponse({ status: 403, description: 'Заборонено' })
+  @ApiResponse({ status: 404, description: 'Поїздку не знайдено' })
   async update(
     @Param('id') id: string,
     @Body() updateRideDto: Partial<CreateRideDto>,
@@ -84,11 +84,11 @@ export class RidesController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Request to book a ride' })
-  @ApiResponse({ status: 200, description: 'Booking request created successfully' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 404, description: 'Ride not found' })
-  @ApiResponse({ status: 400, description: 'Bad request' })
+  @ApiOperation({ summary: 'Надіслати запит на бронювання поїздки' })
+  @ApiResponse({ status: 200, description: 'Запит на бронювання успішно створено' })
+  @ApiResponse({ status: 401, description: 'Неавторизовано' })
+  @ApiResponse({ status: 404, description: 'Поїздку не знайдено' })
+  @ApiResponse({ status: 400, description: 'Невірний запит' })
   async bookRide(
     @Param('id') id: string,
     @Body('passengerCount') passengerCount: number,
@@ -101,12 +101,12 @@ export class RidesController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Update the status of a ride' })
-  @ApiResponse({ status: 200, description: 'Ride status updated successfully' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden' })
-  @ApiResponse({ status: 404, description: 'Ride not found' })
-  @ApiResponse({ status: 400, description: 'Invalid status' })
+  @ApiOperation({ summary: 'Оновити статус поїздки' })
+  @ApiResponse({ status: 200, description: 'Статус поїздки успішно оновлено' })
+  @ApiResponse({ status: 401, description: 'Неавторизовано' })
+  @ApiResponse({ status: 403, description: 'Заборонено' })
+  @ApiResponse({ status: 404, description: 'Поїздку не знайдено' })
+  @ApiResponse({ status: 400, description: 'Невірний статус' })
   async updateStatus(
     @Param('id') id: string,
     @Body('status') status: string,
@@ -119,11 +119,11 @@ export class RidesController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Delete a ride by ID' })
-  @ApiResponse({ status: 200, description: 'Ride deleted successfully' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden' })
-  @ApiResponse({ status: 404, description: 'Ride not found' })
+  @ApiOperation({ summary: 'Видалити поїздку за ID' })
+  @ApiResponse({ status: 200, description: 'Поїздка успішно видалена' })
+  @ApiResponse({ status: 401, description: 'Неавторизовано' })
+  @ApiResponse({ status: 403, description: 'Заборонено' })
+  @ApiResponse({ status: 404, description: 'Поїздку не знайдено' })
   async delete(@Param('id') id: string, @AuthUser() user: any) {
     return this.ridesService.delete(id, user.id);
   }

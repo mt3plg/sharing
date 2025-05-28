@@ -2,9 +2,9 @@ import { Injectable, NotFoundException, ForbiddenException, BadRequestException,
 import { PrismaService } from '../prisma.service';
 import { CreateRideDto, SearchRideDto } from './interfaces/interfaces_ride.interface';
 import { EmailService } from '../email/email.service';
-import axios from 'axios';
+import { Client, DistanceMatrixRequest } from '@googlemaps/google-maps-services-js';
+import { PaymentsService } from '../payments/payments.service';
 
-// Експортуємо інтерфейс для типізації відфільтрованих поїздок
 export interface FilteredRide {
   id: string;
   driverId: string;
@@ -25,6 +25,9 @@ export interface FilteredRide {
   availableSeats: number;
   vehicleType: string | null;
   status: string;
+  fare: number | null;
+  distance: number | null;
+  duration: number | null;
   createdAt: Date;
   updatedAt: Date;
   startDistance: number;
@@ -35,33 +38,69 @@ export interface FilteredRide {
 @Injectable()
 export class RidesService {
   private readonly logger = new Logger(RidesService.name);
+  private readonly googleMapsClient = new Client({});
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly paymentsService: PaymentsService,
   ) {}
 
-  // Функція для геокодування адреси
+  private async calculateDistanceAndDuration(startLocation: string, endLocation: string) {
+    try {
+      const request: DistanceMatrixRequest = {
+        params: {
+          origins: [startLocation],
+          destinations: [endLocation],
+          key: process.env.GOOGLE_MAPS_API_KEY!,
+          mode: 'driving',
+        },
+      };
+
+      const response = await this.googleMapsClient.distancematrix(request);
+      const element = response.data.rows[0]?.elements[0];
+
+      if (!element || element.status !== 'OK') {
+        throw new Error('Failed to calculate distance or duration');
+      }
+
+      const distance = element.distance.value / 1000; // Відстань у кілометрах
+      const duration = Math.round(element.duration.value / 60); // Тривалість у хвилинах
+
+      return { distance, duration };
+    } catch (error) {
+      this.logger.error(`Failed to calculate distance/duration: ${error}`);
+      throw new BadRequestException('Failed to calculate distance or duration');
+    }
+  }
+
+  private calculateFare(distance: number, duration: number): number {
+    const ratePerKm = parseFloat(process.env.RATE_PER_KM || '0.50');
+    const ratePerMinute = parseFloat(process.env.RATE_PER_MINUTE || '0.10');
+    const fare = distance * ratePerKm + duration * ratePerMinute;
+    return Math.round(fare * 100) / 100; // Округлення до 2 знаків
+  }
+
   private async geocodeAddress(address: string): Promise<{ lat: number; lng: number }> {
-    const apiKey = process.env.GOOGLE_API_KEY || 'AIzaSyATQMZZLlcjmR9chpaKM-4YJXwZ9c5iPtk';
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY!;
     const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${apiKey}`;
 
     try {
-      const response = await axios.get(url);
-      const data = response.data;
+      const response = await fetch(url);
+      const data = await response.json();
       if (data.status === 'OK') {
         const location = data.results[0].geometry.location;
         return { lat: location.lat, lng: location.lng };
       } else {
         throw new Error(`Geocoding failed for address: ${address}`);
       }
-    } catch (error: unknown) {
+    } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Geocoding error: ${errorMessage}`);
       throw new BadRequestException(`Failed to geocode address: ${address}`);
     }
   }
 
-  // Функція для обчислення відстані (haversine formula)
   private haversineDistance(coords1: { lat: number; lng: number }, coords2: { lat: number; lng: number }): number {
     const toRad = (value: number) => (value * Math.PI) / 180;
     const R = 6371; // Радіус Землі в кілометрах
@@ -76,7 +115,6 @@ export class RidesService {
     return R * c; // Відстань у кілометрах
   }
 
-  // Відправка сповіщення пасажиру
   private async notifyPassengers(rideId: string, message: string) {
     const bookingRequests = await this.prisma.bookingRequest.findMany({
       where: { rideId, status: 'accepted' },
@@ -99,22 +137,22 @@ export class RidesService {
   async create(createRideDto: CreateRideDto, driverId: string) {
     const { startLocation, endLocation, departureTime, availableSeats, vehicleType, passengerCount = 1 } = createRideDto;
 
-    // Перевірка водія
     const driver = await this.prisma.user.findUnique({ where: { id: driverId } });
     if (!driver || driver.status !== 'active') {
       throw new BadRequestException('Invalid or inactive driver');
     }
 
-    // Перевірка часу відправлення
     const now = new Date();
     const departure = new Date(departureTime);
     if (departure <= now) {
       throw new BadRequestException('Departure time must be in the future');
     }
 
-    // Геокодування адрес
     const startCoords = await this.geocodeAddress(startLocation);
     const endCoords = await this.geocodeAddress(endLocation);
+
+    const { distance, duration } = await this.calculateDistanceAndDuration(startLocation, endLocation);
+    const fare = this.calculateFare(distance, duration);
 
     const ride = await this.prisma.ride.create({
       data: {
@@ -128,10 +166,16 @@ export class RidesService {
         departureTime: departure,
         availableSeats,
         vehicleType: vehicleType || 'Unknown',
+        fare,
+        distance,
+        duration,
+      },
+      include: {
+        driver: { select: { id: true, name: true, avatar: true, rating: true } },
       },
     });
 
-    this.logger.log(`Ride created: ${ride.id}`);
+    this.logger.log(`Ride created: ${ride.id}, fare: ${fare}, distance: ${distance}km, duration: ${duration}min`);
     return { success: true, ride };
   }
 
@@ -182,13 +226,12 @@ export class RidesService {
     const userStartCoords = startCoords || (await this.geocodeAddress(startLocation));
     const userEndCoords = endCoords || (await this.geocodeAddress(endLocation));
 
-    // Нормалізація дати для порівняння (ігноруємо час)
     const departureDate = new Date(departureTime);
     departureDate.setHours(0, 0, 0, 0);
     const minDate = new Date(departureDate);
     minDate.setDate(departureDate.getDate() - dateRange);
     const maxDate = new Date(departureDate);
-    maxDate.setDate(departureDate.getDate() + dateRange + 1); // Включаємо весь день
+    maxDate.setDate(departureDate.getDate() + dateRange + 1);
 
     this.logger.log(`Date range: minDate=${minDate.toISOString()}, maxDate=${maxDate.toISOString()}`);
 
@@ -293,21 +336,26 @@ export class RidesService {
         throw new BadRequestException('Cannot edit ride less than 24 hours before departure');
       }
 
-      // Геокодування нових адрес
       let startCoords = { lat: ride.startCoordsLat, lng: ride.startCoordsLng };
       let endCoords = { lat: ride.endCoordsLat, lng: ride.endCoordsLng };
+      let distance = ride.distance;
+      let duration = ride.duration;
+      let fare = ride.fare;
 
-      if (updateRideDto.startLocation) {
-        startCoords = await this.geocodeAddress(updateRideDto.startLocation);
-      }
-      if (updateRideDto.endLocation) {
-        endCoords = await this.geocodeAddress(updateRideDto.endLocation);
+      if (updateRideDto.startLocation || updateRideDto.endLocation) {
+        const startLocation = updateRideDto.startLocation || ride.startLocation;
+        const endLocation = updateRideDto.endLocation || ride.endLocation;
+        startCoords = await this.geocodeAddress(startLocation);
+        endCoords = await this.geocodeAddress(endLocation);
+        const result = await this.calculateDistanceAndDuration(startLocation, endLocation);
+        distance = result.distance;
+        duration = result.duration;
+        fare = this.calculateFare(distance, duration);
       }
 
       const updatedRide = await prisma.ride.update({
         where: { id },
         data: {
-          ...updateRideDto,
           startLocation: updateRideDto.startLocation || ride.startLocation,
           startCoordsLat: startCoords.lat,
           startCoordsLng: startCoords.lng,
@@ -315,13 +363,18 @@ export class RidesService {
           endCoordsLat: endCoords.lat,
           endCoordsLng: endCoords.lng,
           departureTime: updateRideDto.departureTime ? new Date(updateRideDto.departureTime) : ride.departureTime,
+          availableSeats: updateRideDto.availableSeats || ride.availableSeats,
+          vehicleType: updateRideDto.vehicleType || ride.vehicleType,
+          fare,
+          distance,
+          duration,
         },
         include: { driver: { select: { id: true, name: true, avatar: true, rating: true } } },
       });
 
-      // Сповіщення пасажирів
       await this.notifyPassengers(id, `Ride ${ride.startLocation} → ${ride.endLocation} has been updated`);
 
+      this.logger.log(`Ride updated: ${id}, fare: ${fare}, distance: ${distance}km, duration: ${duration}min`);
       return { success: true, ride: updatedRide };
     });
   }
@@ -345,7 +398,6 @@ export class RidesService {
         throw new BadRequestException('Not enough available seats');
       }
 
-      // Створюємо запит на бронювання замість прямого оновлення
       const existingRequest = await prisma.bookingRequest.findFirst({
         where: { rideId, passengerId },
       });
@@ -359,7 +411,6 @@ export class RidesService {
           rideId,
           passengerId,
           status: 'pending',
-          // Додаємо passengerCount, якщо модель оновлено
         },
         include: {
           passenger: { select: { id: true, name: true, avatar: true, rating: true } },
@@ -413,7 +464,6 @@ export class RidesService {
         include: { driver: { select: { id: true, name: true, avatar: true, rating: true } } },
       });
 
-      // Сповіщення пасажирів при зміні статусу
       await this.notifyPassengers(rideId, `Ride status changed to ${status}`);
 
       return { success: true, ride: updatedRide };
@@ -434,13 +484,11 @@ export class RidesService {
         throw new ForbiddenException('You are not authorized to delete this ride');
       }
 
-      // Відхиляємо всі запити на бронювання
       await prisma.bookingRequest.updateMany({
         where: { rideId, status: 'pending' },
         data: { status: 'rejected' },
       });
 
-      // Сповіщаємо пасажирів із прийнятими запитами
       await this.notifyPassengers(rideId, `Ride ${ride.startLocation} → ${ride.endLocation} has been cancelled`);
 
       await prisma.ride.delete({

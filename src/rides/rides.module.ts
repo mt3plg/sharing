@@ -3,9 +3,10 @@ import { RidesController } from './rides.controller';
 import { RidesService } from './rides.service';
 import { PrismaService } from '../prisma.service';
 import { EmailModule } from '../email/email.module';
+import { PaymentsModule } from '../payments/payments.module';
 
 @Module({
-  imports: [EmailModule], // Додаємо імпорт EmailModule
+  imports: [EmailModule, PaymentsModule],
   controllers: [RidesController],
   providers: [RidesService, PrismaService],
 })
