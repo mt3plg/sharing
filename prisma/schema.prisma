@@ -60,8 +60,8 @@ model Ride {
   vehicleType     String?
   status          String           @default("active")
   fare            Float?
-  distance        Float? // Відстань у кілометрах
-  duration        Int? // Тривалість у хвилинах
+  distance        Float?
+  duration        Int?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   conversations   Conversation[]   @relation("RideConversations")
@@ -157,12 +157,14 @@ model Payment {
   ride                  Ride     @relation("RidePayments", fields: [rideId], references: [id])
   userId                String
   user                  User     @relation("UserPayments", fields: [userId], references: [id])
-  stripePaymentIntentId String   @unique
+  stripePaymentIntentId String?  @unique
   amount                Float
   currency              String
-  status                String
-  commission            Float
-  driverAmount          Float
+  paymentMethod         String // "cash", "google_pay", "apple_pay"
+  status                String // "pending", "succeeded", "failed", "refunded"
+  isPaid                Boolean  @default(false) // Для готівки: чи підтверджено оплату
+  commission            Float?
+  driverAmount          Float?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 }

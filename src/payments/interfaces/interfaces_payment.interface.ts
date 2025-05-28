@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty } from 'class-validator';
+import { IsString, IsNotEmpty, IsEnum } from 'class-validator';
 
 export class SetupPaymentMethodDto {
   @ApiProperty({ example: 'pm_1J...', description: 'Stripe Payment Method ID' })
@@ -14,10 +14,14 @@ export class CreatePaymentDto {
   @IsNotEmpty()
   rideId!: string;
 
-  @ApiProperty({ example: 'pm_1J...', description: 'Stripe Payment Method ID' })
+  @ApiProperty({ example: 'pm_1J...', description: 'Stripe Payment Method ID (required for google_pay or apple_pay)' })
   @IsString()
+  paymentMethodId?: string;
+
+  @ApiProperty({ example: 'google_pay', description: 'Payment method', enum: ['cash', 'google_pay', 'apple_pay'] })
+  @IsEnum(['cash', 'google_pay', 'apple_pay'])
   @IsNotEmpty()
-  paymentMethodId!: string;
+  paymentMethod!: string;
 }
 
 export class RequestPayoutDto {
@@ -29,4 +33,11 @@ export class RequestPayoutDto {
   @IsString()
   @IsNotEmpty()
   currency!: string;
+}
+
+export class ConfirmCashPaymentDto {
+  @ApiProperty({ example: 'payment_123', description: 'Payment ID' })
+  @IsString()
+  @IsNotEmpty()
+  paymentId!: string;
 }

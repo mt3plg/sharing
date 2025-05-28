@@ -189,6 +189,7 @@ export class RidesService {
             passenger: { select: { id: true, name: true, avatar: true, rating: true } },
           },
         },
+        payments: true,
       },
     });
 
@@ -208,6 +209,7 @@ export class RidesService {
             passenger: { select: { id: true, name: true, avatar: true, rating: true } },
           },
         },
+        payments: true,
       },
     });
 
@@ -300,7 +302,10 @@ export class RidesService {
   async findOne(id: string) {
     const ride = await this.prisma.ride.findUnique({
       where: { id },
-      include: { driver: { select: { id: true, name: true, avatar: true, rating: true } } },
+      include: { 
+        driver: { select: { id: true, name: true, avatar: true, rating: true } },
+        payments: true,
+      },
     });
 
     if (!ride) {
@@ -417,6 +422,16 @@ export class RidesService {
         },
       });
 
+      // Оновлюємо статус поїздки, якщо більше немає вільних місць
+      const newAvailableSeats = ride.availableSeats - passengerCount;
+      await prisma.ride.update({
+        where: { id: rideId },
+        data: {
+          availableSeats: newAvailableSeats,
+          status: newAvailableSeats === 0 ? 'booked' : 'active',
+        },
+      });
+
       return {
         success: true,
         bookingRequest: {
@@ -444,6 +459,7 @@ export class RidesService {
     return this.prisma.$transaction(async (prisma) => {
       const ride = await prisma.ride.findUnique({
         where: { id: rideId },
+        include: { payments: true },
       });
 
       if (!ride) {
@@ -456,6 +472,17 @@ export class RidesService {
 
       if (ride.status === 'completed' && status !== 'completed') {
         throw new BadRequestException('Cannot change status of completed ride');
+      }
+
+      // Якщо статус змінюється на "completed", перевіряємо оплату
+      if (status === 'completed') {
+        const payment = ride.payments[0];
+        if (!payment) {
+          throw new BadRequestException('Payment must be created before completing the ride');
+        }
+        if (payment.paymentMethod !== 'cash' && !payment.isPaid) {
+          throw new BadRequestException('Payment must be completed before marking the ride as completed');
+        }
       }
 
       const updatedRide = await prisma.ride.update({

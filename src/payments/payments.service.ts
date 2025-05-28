@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import { SetupPaymentMethodDto, CreatePaymentDto, RequestPayoutDto } from './interfaces/interfaces_payment.interface';
+import { SetupPaymentMethodDto, CreatePaymentDto, RequestPayoutDto, ConfirmCashPaymentDto } from './interfaces/interfaces_payment.interface';
 import Stripe from 'stripe';
 
 @Injectable()
@@ -10,7 +10,7 @@ export class PaymentsService {
 
   constructor(private readonly prisma: PrismaService) {
     this.stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-      apiVersion: '2025-04-30.basil', 
+      apiVersion: '2025-04-30.basil',
     });
   }
 
@@ -113,23 +113,18 @@ export class PaymentsService {
   }
 
   async createPayment(userId: string, createPaymentDto: CreatePaymentDto) {
-    const { rideId, paymentMethodId } = createPaymentDto;
+    const { rideId, paymentMethodId, paymentMethod } = createPaymentDto;
 
     const ride = await this.prisma.ride.findUnique({
       where: { id: rideId },
-      include: { driver: true },
+      include: { driver: true, passenger: true },
     });
     if (!ride || !ride.driverId) {
       throw new NotFoundException('Ride or driver not found');
     }
 
-    const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user || !user.stripeCustomerId) {
-      throw new NotFoundException('User or Stripe customer not found');
-    }
-
-    if (!ride.driver.stripeAccountId) {
-      throw new BadRequestException('Driver has not set up a payout account');
+    if (ride.passengerId !== userId) {
+      throw new ForbiddenException('You are not the passenger of this ride');
     }
 
     if (ride.status !== 'completed') {
@@ -141,44 +136,126 @@ export class PaymentsService {
     }
 
     const amount = Math.round(ride.fare * 100); // Конвертуємо в центи
-    const currency = 'uah'; // Фіксована валюта, можна зробити динамічною
+    const currency = 'uah';
     const commissionRate = parseFloat(process.env.PLATFORM_COMMISSION_RATE || '0.15');
     const commission = amount * commissionRate;
     const driverAmount = amount - commission;
 
-    try {
-      const paymentIntent = await this.stripe.paymentIntents.create({
-        amount,
-        currency,
-        customer: user.stripeCustomerId,
-        payment_method: paymentMethodId,
-        off_session: true,
-        confirm: true,
-        application_fee_amount: Math.round(commission),
-        transfer_data: {
-          destination: ride.driver.stripeAccountId,
-        },
-      });
+    // Перевіряємо, чи вже є платіж для цієї поїздки
+    const existingPayment = await this.prisma.payment.findFirst({
+      where: { rideId, userId },
+    });
+    if (existingPayment) {
+      throw new BadRequestException('Payment for this ride already exists');
+    }
 
+    if (paymentMethod === 'cash') {
+      // Оплата готівкою: створюємо запис без Stripe
       const payment = await this.prisma.payment.create({
         data: {
           rideId,
           userId,
-          stripePaymentIntentId: paymentIntent.id,
           amount: amount / 100,
           currency,
-          status: paymentIntent.status,
+          paymentMethod: 'cash',
+          status: 'pending',
+          isPaid: false,
           commission: commission / 100,
           driverAmount: driverAmount / 100,
         },
       });
 
-      this.logger.log(`Created payment ${payment.id} for ride ${rideId}`);
+      this.logger.log(`Created cash payment ${payment.id} for ride ${rideId}`);
       return { success: true, payment };
-    } catch (error) {
-      this.logger.error(`Failed to create payment: ${error}`);
-      throw new BadRequestException('Failed to create payment');
+    } else if (paymentMethod === 'google_pay' || paymentMethod === 'apple_pay') {
+      // Оплата через Stripe (Google Pay або Apple Pay)
+      const user = await this.prisma.user.findUnique({ where: { id: userId } });
+      if (!user || !user.stripeCustomerId) {
+        throw new NotFoundException('User or Stripe customer not found');
+      }
+
+      if (!ride.driver.stripeAccountId) {
+        throw new BadRequestException('Driver has not set up a payout account');
+      }
+
+      if (!paymentMethodId) {
+        throw new BadRequestException('Payment method ID is required for digital payments');
+      }
+
+      try {
+        const paymentIntent = await this.stripe.paymentIntents.create({
+          amount,
+          currency,
+          customer: user.stripeCustomerId,
+          payment_method: paymentMethodId,
+          off_session: true,
+          confirm: true,
+          application_fee_amount: Math.round(commission),
+          transfer_data: {
+            destination: ride.driver.stripeAccountId,
+          },
+        });
+
+        const payment = await this.prisma.payment.create({
+          data: {
+            rideId,
+            userId,
+            stripePaymentIntentId: paymentIntent.id,
+            amount: amount / 100,
+            currency,
+            paymentMethod,
+            status: paymentIntent.status,
+            isPaid: paymentIntent.status === 'succeeded',
+            commission: commission / 100,
+            driverAmount: driverAmount / 100,
+          },
+        });
+
+        this.logger.log(`Created digital payment ${payment.id} for ride ${rideId}`);
+        return { success: true, payment };
+      } catch (error) {
+        this.logger.error(`Failed to create digital payment: ${error}`);
+        throw new BadRequestException('Failed to create digital payment');
+      }
+    } else {
+      throw new BadRequestException('Invalid payment method');
     }
+  }
+
+  async confirmCashPayment(userId: string, confirmCashPaymentDto: ConfirmCashPaymentDto) {
+    const { paymentId } = confirmCashPaymentDto;
+
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: { ride: { include: { driver: true } } },
+    });
+
+    if (!payment) {
+      throw new NotFoundException('Payment not found');
+    }
+
+    if (payment.paymentMethod !== 'cash') {
+      throw new BadRequestException('This payment is not a cash payment');
+    }
+
+    if (payment.ride.driverId !== userId) {
+      throw new ForbiddenException('You are not the driver of this ride');
+    }
+
+    if (payment.isPaid) {
+      throw new BadRequestException('Payment already confirmed');
+    }
+
+    const updatedPayment = await this.prisma.payment.update({
+      where: { id: paymentId },
+      data: {
+        isPaid: true,
+        status: 'succeeded',
+      },
+    });
+
+    this.logger.log(`Cash payment ${paymentId} confirmed by driver ${userId}`);
+    return { success: true, payment: updatedPayment };
   }
 
   async getPaymentHistory(userId: string, limit: number = 10, offset: number = 0) {
@@ -199,7 +276,9 @@ export class PaymentsService {
         rideId: payment.rideId,
         amount: payment.amount,
         currency: payment.currency,
+        paymentMethod: payment.paymentMethod,
         status: payment.status,
+        isPaid: payment.isPaid,
         createdAt: payment.createdAt,
         ride: {
           startLocation: payment.ride.startLocation,
@@ -220,7 +299,7 @@ export class PaymentsService {
 
     const availableBalance = await this.prisma.payment.aggregate({
       _sum: { driverAmount: true },
-      where: { ride: { driverId: userId }, status: 'succeeded' },
+      where: { ride: { driverId: userId }, status: 'succeeded', isPaid: true },
     });
 
     const paidOut = await this.prisma.payout.aggregate({
@@ -280,7 +359,7 @@ export class PaymentsService {
     }
     await this.prisma.payment.update({
       where: { id: payment.id },
-      data: { status },
+      data: { status, isPaid: status === 'succeeded' },
     });
   }
 
@@ -306,7 +385,7 @@ export class PaymentsService {
     }
     await this.prisma.payment.update({
       where: { id: payment.id },
-      data: { status: 'refunded' },
+      data: { status: 'refunded', isPaid: false },
     });
   }
 
