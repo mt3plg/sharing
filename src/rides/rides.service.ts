@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import { CreateRideDto, SearchRideDto } from './interfaces/interfaces_ride.interface';
+import { CreateRideDto, SearchRideDto, BookRideDto } from './interfaces/interfaces_ride.interface';
 import { EmailService } from '../email/email.service';
 import { Client, DistanceMatrixRequest, TravelMode } from '@googlemaps/google-maps-services-js';
 import { PaymentsService } from '../payments/payments.service';
@@ -428,7 +428,9 @@ export class RidesService {
     });
   }
 
-  async bookRide(rideId: string, passengerId: string, passengerCount: number) {
+  async bookRide(rideId: string, passengerId: string, bookRideDto: BookRideDto) {
+    const { passengerCount } = bookRideDto;
+
     return this.prisma.$transaction(async (prisma) => {
       const ride = await prisma.ride.findUnique({
         where: { id: rideId },

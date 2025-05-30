@@ -11,7 +11,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { RidesService, FilteredRide } from './rides.service';
-import { CreateRideDto, SearchRideDto } from './interfaces/interfaces_ride.interface';
+import { CreateRideDto, SearchRideDto, BookRideDto } from './interfaces/interfaces_ride.interface';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuthUser } from '../common/decorators/common_decorators_user.decorator';
@@ -91,10 +91,10 @@ export class RidesController {
   @ApiResponse({ status: 400, description: 'Невірний запит' })
   async bookRide(
     @Param('id') id: string,
-    @Body('passengerCount') passengerCount: number,
+    @Body() bookRideDto: BookRideDto,
     @AuthUser() user: any,
   ) {
-    return this.ridesService.bookRide(id, user.id, passengerCount);
+    return this.ridesService.bookRide(id, user.id, bookRideDto);
   }
 
   @Patch(':id/status')

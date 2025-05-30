@@ -104,3 +104,10 @@ export class SearchRideDto {
   @IsOptional()
   offset?: number;
 }
+
+export class BookRideDto {
+  @ApiProperty({ example: 1, description: 'The number of passengers for booking' })
+  @IsInt()
+  @Min(1)
+  passengerCount!: number;
+}
