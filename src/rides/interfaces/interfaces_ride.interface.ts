@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsInt, Min, IsDateString, IsOptional, IsNumber } from 'class-validator';
+import { IsString, IsNotEmpty, IsInt, Min, IsDateString, IsOptional, IsNumber, IsIn } from 'class-validator';
 
 export class CreateRideDto {
   @ApiProperty({ example: 'Kyiv, Ukraine', description: 'The starting location of the ride' })
