@@ -33,6 +33,17 @@ export class CreateRideDto {
   @Min(1)
   @IsOptional()
   passengerCount?: number;
+
+  @ApiProperty({ example: 'both', description: 'The payment type for the ride (card, cash, both)', required: false })
+  @IsString()
+  @IsIn(['card', 'cash', 'both'])
+  @IsOptional()
+  paymentType?: string;
+
+  @ApiProperty({ example: '7a92bc26-7af2-4854-aebb-a7ae927f2fc5', description: 'The ID of the selected payment card', required: false })
+  @IsString()
+  @IsOptional()
+  selectedCardId?: string;
 }
 
 export class SearchRideDto {

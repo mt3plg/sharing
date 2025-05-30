@@ -62,11 +62,27 @@ model Ride {
   fare            Float?
   distance        Float?
   duration        Int?
+  paymentType     String?          @default("both") // "card", "cash", "both"
+  selectedCardId  String? // ID обраної картки водія
+  selectedCard    PaymentMethod?   @relation("RideSelectedCard", fields: [selectedCardId], references: [id])
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   conversations   Conversation[]   @relation("RideConversations")
   bookingRequests BookingRequest[] @relation("RideBookingRequests")
   payments        Payment[]        @relation("RidePayments")
+}
+
+model PaymentMethod {
+  id                    String   @id @default(uuid())
+  userId                String
+  user                  User     @relation("UserPaymentMethods", fields: [userId], references: [id])
+  stripePaymentMethodId String   @unique
+  type                  String
+  last4                 String?
+  brand                 String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  selectedRides         Ride[]   @relation("RideSelectedCard")
 }
 
 model Conversation {
@@ -137,18 +153,6 @@ model FriendRequest {
 
   @@index([senderId])
   @@index([receiverId])
-}
-
-model PaymentMethod {
-  id                    String   @id @default(uuid())
-  userId                String
-  user                  User     @relation("UserPaymentMethods", fields: [userId], references: [id])
-  stripePaymentMethodId String   @unique
-  type                  String
-  last4                 String?
-  brand                 String?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
 }
 
 model Payment {

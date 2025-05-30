@@ -28,6 +28,8 @@ export interface FilteredRide {
   fare: number | null;
   distance: number | null;
   duration: number | null;
+  paymentType: string | null;
+  selectedCardId: string | null;
   createdAt: Date;
   updatedAt: Date;
   startDistance: number;
@@ -64,8 +66,8 @@ export class RidesService {
         throw new Error('Failed to calculate distance or duration');
       }
 
-      const distance = element.distance.value / 1000; // Відстань у кілометрах
-      const duration = Math.round(element.duration.value / 60); // Тривалість у хвилинах
+      const distance = element.distance.value / 1000;
+      const duration = Math.round(element.duration.value / 60);
 
       return { distance, duration };
     } catch (error) {
@@ -78,7 +80,7 @@ export class RidesService {
     const ratePerKm = parseFloat(process.env.RATE_PER_KM || '0.50');
     const ratePerMinute = parseFloat(process.env.RATE_PER_MINUTE || '0.10');
     const fare = distance * ratePerKm + duration * ratePerMinute;
-    return Math.round(fare * 100) / 100; // Округлення до 2 знаків
+    return Math.round(fare * 100) / 100;
   }
 
   private async geocodeAddress(address: string): Promise<{ lat: number; lng: number }> {
@@ -102,7 +104,7 @@ export class RidesService {
 
   private haversineDistance(coords1: { lat: number; lng: number }, coords2: { lat: number; lng: number }): number {
     const toRad = (value: number) => (value * Math.PI) / 180;
-    const R = 6371; // Радіус Землі в кілометрах
+    const R = 6371;
     const dLat = toRad(coords2.lat - coords1.lat);
     const dLon = toRad(coords2.lng - coords1.lng);
     const lat1 = toRad(coords1.lat);
@@ -111,7 +113,7 @@ export class RidesService {
     const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
               Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c; // Відстань у кілометрах
+    return R * c;
   }
 
   private async notifyPassengers(rideId: string, message: string) {
@@ -134,7 +136,7 @@ export class RidesService {
   }
 
   async create(createRideDto: CreateRideDto, driverId: string) {
-    const { startLocation, endLocation, departureTime, availableSeats, vehicleType, passengerCount = 1 } = createRideDto;
+    const { startLocation, endLocation, departureTime, availableSeats, vehicleType, passengerCount = 1, paymentType = 'both', selectedCardId } = createRideDto;
 
     const driver = await this.prisma.user.findUnique({ where: { id: driverId } });
     if (!driver || driver.status !== 'active') {
@@ -145,6 +147,17 @@ export class RidesService {
     const departure = new Date(departureTime);
     if (departure <= now) {
       throw new BadRequestException('Departure time must be in the future');
+    }
+
+    if (paymentType === 'card' && !selectedCardId) {
+      throw new BadRequestException('Selected card is required for card payment type');
+    }
+
+    if (selectedCardId) {
+      const card = await this.prisma.paymentMethod.findUnique({ where: { id: selectedCardId } });
+      if (!card || card.userId !== driverId) {
+        throw new BadRequestException('Invalid or unauthorized payment method');
+      }
     }
 
     const startCoords = await this.geocodeAddress(startLocation);
@@ -168,9 +181,12 @@ export class RidesService {
         fare,
         distance,
         duration,
+        paymentType,
+        selectedCardId: paymentType === 'card' || paymentType === 'both' ? selectedCardId : null,
       },
       include: {
         driver: { select: { id: true, name: true, avatar: true, rating: true } },
+        selectedCard: { select: { id: true, brand: true, last4: true } },
       },
     });
 
@@ -189,6 +205,7 @@ export class RidesService {
           },
         },
         payments: true,
+        selectedCard: { select: { id: true, brand: true, last4: true } },
       },
     });
 
@@ -209,6 +226,7 @@ export class RidesService {
           },
         },
         payments: true,
+        selectedCard: { select: { id: true, brand: true, last4: true } },
       },
     });
 
@@ -247,6 +265,7 @@ export class RidesService {
       },
       include: {
         driver: { select: { id: true, name: true, avatar: true, rating: true } },
+        selectedCard: { select: { id: true, brand: true, last4: true } },
       },
       take: limit,
       skip: offset,
@@ -269,7 +288,14 @@ export class RidesService {
     for (const ride of rides) {
       if (!ride.startCoordsLat || !ride.startCoordsLng || !ride.endCoordsLat || !ride.endCoordsLng) {
         this.logger.warn(`Ride ${ride.id} missing coordinates, including without distance filter`);
-        filteredRides.push({ ...ride, startDistance: 0, endDistance: 0, totalDistance: 0 });
+        filteredRides.push({
+          ...ride,
+          paymentType: ride.paymentType,
+          selectedCardId: ride.selectedCardId,
+          startDistance: 0,
+          endDistance: 0,
+          totalDistance: 0,
+        });
         continue;
       }
 
@@ -283,6 +309,8 @@ export class RidesService {
       if (startDistance <= maxDistance && endDistance <= maxDistance) {
         filteredRides.push({
           ...ride,
+          paymentType: ride.paymentType,
+          selectedCardId: ride.selectedCardId,
           startDistance,
           endDistance,
           totalDistance: startDistance + endDistance,
@@ -301,9 +329,10 @@ export class RidesService {
   async findOne(id: string) {
     const ride = await this.prisma.ride.findUnique({
       where: { id },
-      include: { 
+      include: {
         driver: { select: { id: true, name: true, avatar: true, rating: true } },
         payments: true,
+        selectedCard: { select: { id: true, brand: true, last4: true } },
       },
     });
 
@@ -357,6 +386,17 @@ export class RidesService {
         fare = this.calculateFare(distance, duration);
       }
 
+      if (updateRideDto.paymentType === 'card' && !updateRideDto.selectedCardId) {
+        throw new BadRequestException('Selected card is required for card payment type');
+      }
+
+      if (updateRideDto.selectedCardId) {
+        const card = await this.prisma.paymentMethod.findUnique({ where: { id: updateRideDto.selectedCardId } });
+        if (!card || card.userId !== userId) {
+          throw new BadRequestException('Invalid or unauthorized payment method');
+        }
+      }
+
       const updatedRide = await prisma.ride.update({
         where: { id },
         data: {
@@ -372,8 +412,13 @@ export class RidesService {
           fare,
           distance,
           duration,
+          paymentType: updateRideDto.paymentType || ride.paymentType,
+          selectedCardId: updateRideDto.paymentType === 'card' || updateRideDto.paymentType === 'both' ? updateRideDto.selectedCardId : null,
         },
-        include: { driver: { select: { id: true, name: true, avatar: true, rating: true } } },
+        include: {
+          driver: { select: { id: true, name: true, avatar: true, rating: true } },
+          selectedCard: { select: { id: true, brand: true, last4: true } },
+        },
       });
 
       await this.notifyPassengers(id, `Ride ${ride.startLocation} → ${ride.endLocation} has been updated`);
@@ -421,7 +466,6 @@ export class RidesService {
         },
       });
 
-      // Оновлюємо статус поїздки, якщо більше немає вільних місць
       const newAvailableSeats = ride.availableSeats - passengerCount;
       await prisma.ride.update({
         where: { id: rideId },
@@ -473,7 +517,6 @@ export class RidesService {
         throw new BadRequestException('Cannot change status of completed ride');
       }
 
-      // Якщо статус змінюється на "completed", перевіряємо оплату для всіх пасажирів
       if (status === 'completed') {
         const acceptedBookings = ride.bookingRequests.filter(br => br.status === 'accepted');
         for (const booking of acceptedBookings) {
@@ -490,7 +533,10 @@ export class RidesService {
       const updatedRide = await prisma.ride.update({
         where: { id: rideId },
         data: { status },
-        include: { driver: { select: { id: true, name: true, avatar: true, rating: true } } },
+        include: {
+          driver: { select: { id: true, name: true, avatar: true, rating: true } },
+          selectedCard: { select: { id: true, brand: true, last4: true } },
+        },
       });
 
       await this.notifyPassengers(rideId, `Ride status changed to ${status}`);
