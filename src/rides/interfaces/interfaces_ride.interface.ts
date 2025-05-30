@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, IsInt, Min, IsDateString, IsOptional, IsNumber, IsIn } from 'class-validator';
+import { IsString, IsNotEmpty, IsInt, Min, IsDateString, IsOptional, IsNumber, IsIn, IsObject } from 'class-validator';
 
 export class CreateRideDto {
   @ApiProperty({ example: 'Kyiv, Ukraine', description: 'The starting location of the ride' })
@@ -40,10 +40,14 @@ export class CreateRideDto {
   @IsOptional()
   paymentType?: string;
 
-  @ApiProperty({ example: '7a92bc26-7af2-4854-aebb-a7ae927f2fc5', description: 'The ID of the selected payment card', required: false })
-  @IsString()
+  @ApiProperty({
+    example: { id: '7a92bc26-7af2-4854-aebb-a7ae927f2fc5', brand: 'visa', last4: '4242' },
+    description: 'The selected payment card details',
+    required: false,
+  })
+  @IsObject()
   @IsOptional()
-  selectedCardId?: string;
+  selectedCard?: { id: string; brand: string; last4: string };
 }
 
 export class SearchRideDto {

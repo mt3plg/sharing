@@ -136,7 +136,7 @@ export class RidesService {
   }
 
   async create(createRideDto: CreateRideDto, driverId: string) {
-    const { startLocation, endLocation, departureTime, availableSeats, vehicleType, passengerCount = 1, paymentType = 'both', selectedCardId } = createRideDto;
+    const { startLocation, endLocation, departureTime, availableSeats, vehicleType, passengerCount = 1, paymentType = 'both', selectedCard } = createRideDto;
 
     const driver = await this.prisma.user.findUnique({ where: { id: driverId } });
     if (!driver || driver.status !== 'active') {
@@ -149,12 +149,12 @@ export class RidesService {
       throw new BadRequestException('Departure time must be in the future');
     }
 
-    if (paymentType === 'card' && !selectedCardId) {
+    if (paymentType === 'card' && !selectedCard?.id) {
       throw new BadRequestException('Selected card is required for card payment type');
     }
 
-    if (selectedCardId) {
-      const card = await this.prisma.paymentMethod.findUnique({ where: { id: selectedCardId } });
+    if (selectedCard?.id) {
+      const card = await this.prisma.paymentMethod.findUnique({ where: { id: selectedCard.id } });
       if (!card || card.userId !== driverId) {
         throw new BadRequestException('Invalid or unauthorized payment method');
       }
@@ -182,7 +182,7 @@ export class RidesService {
         distance,
         duration,
         paymentType,
-        selectedCardId: paymentType === 'card' || paymentType === 'both' ? selectedCardId : null,
+        selectedCardId: paymentType === 'card' || paymentType === 'both' ? selectedCard?.id : null,
       },
       include: {
         driver: { select: { id: true, name: true, avatar: true, rating: true } },
@@ -386,12 +386,12 @@ export class RidesService {
         fare = this.calculateFare(distance, duration);
       }
 
-      if (updateRideDto.paymentType === 'card' && !updateRideDto.selectedCardId) {
+      if (updateRideDto.paymentType === 'card' && !updateRideDto.selectedCard?.id) {
         throw new BadRequestException('Selected card is required for card payment type');
       }
 
-      if (updateRideDto.selectedCardId) {
-        const card = await this.prisma.paymentMethod.findUnique({ where: { id: updateRideDto.selectedCardId } });
+      if (updateRideDto.selectedCard?.id) {
+        const card = await this.prisma.paymentMethod.findUnique({ where: { id: updateRideDto.selectedCard.id } });
         if (!card || card.userId !== userId) {
           throw new BadRequestException('Invalid or unauthorized payment method');
         }
@@ -413,7 +413,7 @@ export class RidesService {
           distance,
           duration,
           paymentType: updateRideDto.paymentType || ride.paymentType,
-          selectedCardId: updateRideDto.paymentType === 'card' || updateRideDto.paymentType === 'both' ? updateRideDto.selectedCardId : null,
+          selectedCardId: updateRideDto.paymentType === 'card' || updateRideDto.paymentType === 'both' ? updateRideDto.selectedCard?.id : null,
         },
         include: {
           driver: { select: { id: true, name: true, avatar: true, rating: true } },
