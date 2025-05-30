@@ -136,7 +136,7 @@ export class RidesService {
   }
 
   async create(createRideDto: CreateRideDto, driverId: string) {
-    const { startLocation, endLocation, departureTime, availableSeats, vehicleType, passengerCount = 1, paymentType = 'both', selectedCard } = createRideDto;
+    const { startLocation, endLocation, departureTime, availableSeats, vehicleType, paymentType = 'both', selectedCard } = createRideDto;
 
     const driver = await this.prisma.user.findUnique({ where: { id: driverId } });
     if (!driver || driver.status !== 'active') {
@@ -431,6 +431,10 @@ export class RidesService {
   async bookRide(rideId: string, passengerId: string, bookRideDto: BookRideDto) {
     const { passengerCount } = bookRideDto;
 
+    if (rideId !== bookRideDto.rideId) {
+      throw new BadRequestException('Ride ID in URL does not match ride ID in body');
+    }
+
     return this.prisma.$transaction(async (prisma) => {
       const ride = await prisma.ride.findUnique({
         where: { id: rideId },
@@ -446,7 +450,11 @@ export class RidesService {
       }
 
       if (ride.availableSeats < passengerCount) {
-        throw new BadRequestException('Not enough available seats');
+        throw new BadRequestException(`Not enough available seats. Requested: ${passengerCount}, Available: ${ride.availableSeats}`);
+      }
+
+      if (ride.driverId === passengerId) {
+        throw new BadRequestException('Driver cannot book their own ride');
       }
 
       const existingRequest = await prisma.bookingRequest.findFirst({
@@ -462,6 +470,7 @@ export class RidesService {
           rideId,
           passengerId,
           status: 'pending',
+          passengerCount,
         },
         include: {
           passenger: { select: { id: true, name: true, avatar: true, rating: true } },
@@ -477,6 +486,8 @@ export class RidesService {
         },
       });
 
+      this.logger.log(`Booking request created for ride ${rideId} by passenger ${passengerId} with ${passengerCount} passengers`);
+
       return {
         success: true,
         bookingRequest: {
@@ -488,6 +499,7 @@ export class RidesService {
             avatar: bookingRequest.passenger.avatar,
             rating: bookingRequest.passenger.rating ?? 0,
           },
+          passengerCount: bookingRequest.passengerCount,
           status: bookingRequest.status,
           createdAt: bookingRequest.createdAt.toISOString(),
         },

@@ -132,13 +132,14 @@ model Friend {
 }
 
 model BookingRequest {
-  id          String   @id @default(uuid())
-  rideId      String
-  ride        Ride     @relation("RideBookingRequests", fields: [rideId], references: [id])
-  passengerId String
-  passenger   User     @relation("UserBookingRequests", fields: [passengerId], references: [id])
-  status      String   @default("pending")
-  createdAt   DateTime @default(now())
+  id             String   @id @default(uuid())
+  rideId         String
+  ride           Ride     @relation("RideBookingRequests", fields: [rideId], references: [id])
+  passengerCount Int      @default(1)
+  passengerId    String
+  passenger      User     @relation("UserBookingRequests", fields: [passengerId], references: [id])
+  status         String   @default("pending")
+  createdAt      DateTime @default(now())
 }
 
 model FriendRequest {

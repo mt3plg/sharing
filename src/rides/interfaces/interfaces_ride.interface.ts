@@ -106,6 +106,11 @@ export class SearchRideDto {
 }
 
 export class BookRideDto {
+  @ApiProperty({ example: '67ce0f2d-4518-4389-9e6b-d9ecdc404ccc', description: 'The ID of the ride to book' })
+  @IsString()
+  @IsNotEmpty()
+  rideId!: string;
+
   @ApiProperty({ example: 1, description: 'The number of passengers for booking' })
   @IsInt()
   @Min(1)
