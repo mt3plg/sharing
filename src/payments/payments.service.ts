@@ -290,36 +290,47 @@ export class PaymentsService {
     return { success: true, payment: updatedPayment };
   }
 
-  async getPaymentHistory(userId: string, limit: number = 10, offset: number = 0) {
+  async getPaymentHistory(userId: string, limit: number = 10, offset: number = 0, rideId?: string) {
+    const whereClause: any = {
+        OR: [
+            { userId }, // Платежі, створені користувачем (пасажиром)
+            { ride: { driverId: userId } }, // Платежі для поїздок, де користувач є водієм
+        ],
+    };
+
+    if (rideId) {
+        whereClause.rideId = rideId; // Фільтр за rideId, якщо вказано
+    }
+
     const payments = await this.prisma.payment.findMany({
-      where: { userId },
-      take: limit,
-      skip: offset,
-      orderBy: { createdAt: 'desc' },
-      include: { ride: { select: { startLocation: true, endLocation: true } } },
+        where: whereClause,
+        take: limit,
+        skip: offset,
+        orderBy: { createdAt: 'desc' },
+        include: { ride: { select: { startLocation: true, endLocation: true } } },
     });
 
-    const total = await this.prisma.payment.count({ where: { userId } });
+    const total = await this.prisma.payment.count({ where: whereClause });
 
     return {
-      success: true,
-      payments: payments.map((payment) => ({
-        id: payment.id,
-        rideId: payment.rideId,
-        amount: payment.amount,
-        currency: payment.currency,
-        paymentMethod: payment.paymentMethod,
-        status: payment.status,
-        isPaid: payment.isPaid,
-        createdAt: payment.createdAt,
-        ride: {
-          startLocation: payment.ride.startLocation,
-          endLocation: payment.ride.endLocation,
-        },
-      })),
-      total,
+        success: true,
+        payments: payments.map((payment) => ({
+            id: payment.id,
+            rideId: payment.rideId,
+            amount: payment.amount,
+            currency: payment.currency,
+            paymentMethod: payment.paymentMethod,
+            status: payment.status,
+            isPaid: payment.isPaid,
+            createdAt: payment.createdAt,
+            ride: {
+                startLocation: payment.ride.startLocation,
+                endLocation: payment.ride.endLocation,
+            },
+        })),
+        total,
     };
-  }
+}
 
   async requestPayout(userId: string, requestPayoutDto: RequestPayoutDto) {
     const { amount, currency } = requestPayoutDto;

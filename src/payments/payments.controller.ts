@@ -97,13 +97,14 @@ export class PaymentsController {
   @ApiResponse({ status: 200, description: 'Payment history successfully retrieved' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getPaymentHistory(
-    @Request() req,
-    @Query('limit') limit: string = '10',
-    @Query('offset') offset: string = '0',
+      @Request() req,
+      @Query('limit') limit: string = '10',
+      @Query('offset') offset: string = '0',
+      @Query('rideId') rideId?: string,
   ) {
-    const userId = req.user?.id;
-    this.logger.log(`Fetching payment history for user ${userId} with limit ${limit}, offset ${offset}`);
-    return this.paymentsService.getPaymentHistory(userId, parseInt(limit), parseInt(offset));
+      const userId = req.user?.id;
+      this.logger.log(`Fetching payment history for user ${userId} with limit ${limit}, offset ${offset}, rideId ${rideId || 'none'}`);
+      return this.paymentsService.getPaymentHistory(userId, parseInt(limit), parseInt(offset), rideId);
   }
 
   @Post('payout')
