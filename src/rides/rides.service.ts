@@ -512,38 +512,40 @@ export class RidesService {
     if (!validStatuses.includes(status)) {
       throw new BadRequestException(`Invalid status: ${status}`);
     }
-
+  
     return this.prisma.$transaction(async (prisma) => {
       const ride = await prisma.ride.findUnique({
         where: { id: rideId },
         include: { payments: true, bookingRequests: { include: { passenger: true } } },
       });
-
+  
       if (!ride) {
         throw new NotFoundException('Ride not found');
       }
-
+  
       if (ride.driverId !== userId) {
         throw new ForbiddenException('You are not authorized to update this ride');
       }
-
+  
       if (ride.status === 'completed' && status !== 'completed') {
         throw new BadRequestException('Cannot change status of completed ride');
       }
-
+  
       if (status === 'completed') {
         const acceptedBookings = ride.bookingRequests.filter(br => br.status === 'accepted');
+        if (acceptedBookings.length === 0) {
+          throw new BadRequestException('No accepted booking requests for this ride');
+        }
+  
+        // Перевірка платежів лише для цифрових методів оплати
         for (const booking of acceptedBookings) {
           const payment = ride.payments.find(p => p.userId === booking.passengerId);
-          if (!payment) {
-            throw new BadRequestException(`No payment found for passenger ${booking.passengerId}`);
-          }
-          if (payment.paymentMethod !== 'cash' && !payment.isPaid) {
+          if (payment && payment.paymentMethod !== 'cash' && !payment.isPaid) {
             throw new BadRequestException(`Payment for passenger ${booking.passengerId} is not completed`);
           }
         }
       }
-
+  
       const updatedRide = await prisma.ride.update({
         where: { id: rideId },
         data: { status },
@@ -552,9 +554,10 @@ export class RidesService {
           selectedCard: { select: { id: true, brand: true, last4: true } },
         },
       });
-
+  
       await this.notifyPassengers(rideId, `Ride status changed to ${status}`);
-
+  
+      this.logger.log(`Ride ${rideId} status updated to ${status} by user ${userId}`);
       return { success: true, ride: updatedRide };
     });
   }
