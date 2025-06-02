@@ -130,39 +130,49 @@ export class PaymentsService {
 
   async createPayment(userId: string, createPaymentDto: CreatePaymentDto) {
     const { rideId, paymentMethodId, paymentMethod } = createPaymentDto;
-
+  
+    this.logger.log(`Creating payment for user ${userId} for ride ${rideId}`);
+  
     const ride = await this.prisma.ride.findUnique({
       where: { id: rideId },
-      include: { driver: true, passenger: true, payments: true },
+      include: {
+        driver: true,
+        bookingRequests: { include: { passenger: true } },
+        payments: true,
+      },
     });
     if (!ride || !ride.driverId) {
+      this.logger.error(`Ride ${rideId} or driver not found`);
       throw new NotFoundException('Ride or driver not found');
     }
-
-    if (ride.passengerId !== userId) {
+  
+    // Перевірка, чи є користувач пасажиром через bookingRequests
+    const acceptedBooking = ride.bookingRequests.find(
+      (req) => req.passengerId === userId && req.status === 'accepted'
+    );
+    if (!acceptedBooking) {
+      this.logger.error(`User ${userId} is not an accepted passenger for ride ${rideId}`);
       throw new ForbiddenException('You are not the passenger of this ride');
     }
-
-    if (ride.status !== 'completed') {
-      throw new BadRequestException('Ride must be completed to process payment');
-    }
-
+  
     if (!ride.fare) {
+      this.logger.error(`Ride ${rideId} fare not set`);
       throw new BadRequestException('Ride fare not set');
     }
-
+  
     // Перевірка наявності існуючого платежу
     const existingPayment = ride.payments.find(p => p.userId === userId);
     if (existingPayment && ['succeeded', 'pending'].includes(existingPayment.status)) {
+      this.logger.warn(`Payment already exists for user ${userId} on ride ${rideId}`);
       throw new BadRequestException('Payment for this ride already exists');
     }
-
+  
     const amount = Math.round(ride.fare * 100); // Конвертуємо в копійки
     const currency = 'uah';
     const commissionRate = parseFloat(process.env.PLATFORM_COMMISSION_RATE || '0.15');
     const commission = amount * commissionRate;
     const driverAmount = amount - commission;
-
+  
     if (paymentMethod === 'cash') {
       const payment = await this.prisma.payment.create({
         data: {
@@ -177,29 +187,32 @@ export class PaymentsService {
           driverAmount: driverAmount / 100,
         },
       });
-
+  
       this.logger.log(`Created cash payment ${payment.id} for ride ${rideId}`);
       return { success: true, payment };
     } else if (paymentMethod === 'google_pay' || paymentMethod === 'apple_pay') {
       let user = await this.prisma.user.findUnique({ where: { id: userId } });
       if (!user) {
+        this.logger.error(`User ${userId} not found`);
         throw new NotFoundException('User not found');
       }
-
+  
       // Автоматично створюємо Stripe-клієнта, якщо його немає
       if (!user.stripeCustomerId) {
         const customerId = await this.setupCustomer(userId);
         user = await this.prisma.user.findUnique({ where: { id: userId } });
       }
-
+  
       if (!ride.driver.stripeAccountId) {
+        this.logger.error(`Driver for ride ${rideId} has no Stripe account`);
         throw new BadRequestException('Driver has not set up a payout account');
       }
-
+  
       if (!paymentMethodId) {
+        this.logger.error(`Payment method ID missing for digital payment`);
         throw new BadRequestException('Payment method ID is required for digital payments');
       }
-
+  
       try {
         const paymentIntent = await this.stripe.paymentIntents.create({
           amount,
@@ -213,7 +226,7 @@ export class PaymentsService {
             destination: ride.driver.stripeAccountId,
           },
         });
-
+  
         const payment = await this.prisma.payment.create({
           data: {
             rideId,
@@ -228,14 +241,15 @@ export class PaymentsService {
             driverAmount: driverAmount / 100,
           },
         });
-
+  
         this.logger.log(`Created digital payment ${payment.id} for ride ${rideId}`);
         return { success: true, payment };
       } catch (error) {
-        this.logger.error(`Failed to create digital payment: ${error}`);
+        this.logger.error(`Failed to create digital payment for ride ${rideId}: ${error}`);
         throw new BadRequestException('Failed to create digital payment');
       }
     } else {
+      this.logger.error(`Invalid payment method: ${paymentMethod}`);
       throw new BadRequestException('Invalid payment method');
     }
   }

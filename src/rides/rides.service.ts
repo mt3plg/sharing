@@ -510,6 +510,7 @@ export class RidesService {
   async updateStatus(rideId: string, status: string, userId: string) {
     const validStatuses = ['active', 'booked', 'completed', 'cancelled'];
     if (!validStatuses.includes(status)) {
+      this.logger.error(`Invalid status: ${status} for ride ${rideId}`);
       throw new BadRequestException(`Invalid status: ${status}`);
     }
   
@@ -520,20 +521,24 @@ export class RidesService {
       });
   
       if (!ride) {
+        this.logger.error(`Ride ${rideId} not found`);
         throw new NotFoundException('Ride not found');
       }
   
       if (ride.driverId !== userId) {
+        this.logger.error(`User ${userId} is not authorized to update ride ${rideId}`);
         throw new ForbiddenException('You are not authorized to update this ride');
       }
   
       if (ride.status === 'completed' && status !== 'completed') {
+        this.logger.error(`Cannot change status of completed ride ${rideId}`);
         throw new BadRequestException('Cannot change status of completed ride');
       }
   
       if (status === 'completed') {
         const acceptedBookings = ride.bookingRequests.filter(br => br.status === 'accepted');
         if (acceptedBookings.length === 0) {
+          this.logger.error(`No accepted booking requests for ride ${rideId}`);
           throw new BadRequestException('No accepted booking requests for this ride');
         }
   
@@ -541,6 +546,7 @@ export class RidesService {
         for (const booking of acceptedBookings) {
           const payment = ride.payments.find(p => p.userId === booking.passengerId);
           if (payment && payment.paymentMethod !== 'cash' && !payment.isPaid) {
+            this.logger.error(`Payment for passenger ${booking.passengerId} is not completed for ride ${rideId}`);
             throw new BadRequestException(`Payment for passenger ${booking.passengerId} is not completed`);
           }
         }
