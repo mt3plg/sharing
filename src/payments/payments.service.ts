@@ -108,9 +108,10 @@ export class PaymentsService {
 
       this.logger.log(`Added payment method ${paymentMethod.id} for user ${userId}`);
       return { success: true, paymentMethodId: paymentMethod.id };
-    } catch (error) {
-      this.logger.error(`Failed to add payment method: ${error}`);
-      throw new BadRequestException(`Failed to add payment method: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to add payment method: ${message}`);
+      throw new BadRequestException(`Failed to add payment method: ${message}`);
     }
   }
 
@@ -152,7 +153,7 @@ export class PaymentsService {
       throw new ForbiddenException('You are not the passenger of this ride');
     }
 
-    if (!ride.fare) {
+    if (ride.fare == null) {
       this.logger.error(`Ride ${rideId} fare not set`);
       throw new BadRequestException('Ride fare not set');
     }
@@ -181,7 +182,7 @@ export class PaymentsService {
 
     const commissionRate = parseFloat(process.env.PLATFORM_COMMISSION_RATE ?? '0.15');
     const currency = 'uah';
-    const { amount, commission, driverAmount } = this.calculatePaymentDetails(ride.fare, commissionRate);
+    const { amount, commission, driverAmount } = this.calculatePaymentDetails(ride.fare!, commissionRate);
 
     if (paymentMethod === 'cash') {
       const payment = await this.prisma.payment.create({
@@ -203,7 +204,7 @@ export class PaymentsService {
     }
 
     if (paymentMethod === 'google_pay' || paymentMethod === 'apple_pay') {
-      const user = await this.prisma.user.findUnique({ where: { id: userId } });
+      let user = await this.prisma.user.findUnique({ where: { id: userId } });
       if (!user) {
         this.logger.error(`User ${userId} not found`);
         throw new NotFoundException('User not found');
@@ -211,6 +212,11 @@ export class PaymentsService {
 
       if (!user.stripeCustomerId) {
         await this.setupCustomer(userId);
+        user = await this.prisma.user.findUnique({ where: { id: userId } });
+        if (!user?.stripeCustomerId) {
+          this.logger.error(`Failed to set up Stripe customer for user ${userId}`);
+          throw new BadRequestException('Failed to set up Stripe customer');
+        }
       }
 
       if (!ride.driver.stripeAccountId) {
@@ -233,7 +239,7 @@ export class PaymentsService {
         const paymentIntent = await this.stripe.paymentIntents.create({
           amount,
           currency,
-          customer: user.stripeCustomerId!,
+          customer: user.stripeCustomerId,
           payment_method: paymentMethodId,
           off_session: true,
           confirm: true,
@@ -260,9 +266,10 @@ export class PaymentsService {
 
         this.logger.log(`Created digital payment ${payment.id} for ride ${rideId}`);
         return { success: true, payment };
-      } catch (error) {
-        this.logger.error(`Failed to create digital payment for ride ${rideId}: ${error}`);
-        throw new BadRequestException('Failed to create digital payment');
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        this.logger.error(`Failed to create digital payment for ride ${rideId}: ${message}`);
+        throw new BadRequestException(`Failed to create digital payment: ${message}`);
       }
     }
 
@@ -391,9 +398,10 @@ export class PaymentsService {
 
       this.logger.log(`Created payout ${payoutRecord.id} for user ${userId}`);
       return { success: true, payout: payoutRecord };
-    } catch (error) {
-      this.logger.error(`Failed to create payout: ${error}`);
-      throw new BadRequestException('Failed to create payout');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to create payout: ${message}`);
+      throw new BadRequestException(`Failed to create payout: ${message}`);
     }
   }
 
@@ -456,24 +464,28 @@ export class PaymentsService {
     });
   }
 
-  private handlePaymentIntentSucceeded(event: Stripe.Event) {
-    const paymentIntent = event.data.object;
-    return this.updatePaymentStatus(paymentIntent.id, 'succeeded');
+  private async handlePaymentIntentSucceeded(event: Stripe.Event) {
+    const paymentIntent = event.data.object as Stripe.PaymentIntent;
+    await this.updatePaymentStatus(paymentIntent.id, 'succeeded');
+    this.logger.log(`Payment succeeded: ${paymentIntent.id}`);
   }
 
-  private handlePaymentIntentFailed(event: Stripe.Event) {
-    const paymentIntent = event.data.object;
-    return this.updatePaymentStatus(paymentIntent.id, 'failed');
+  private async handlePaymentIntentFailed(event: Stripe.Event) {
+    const paymentIntent = event.data.object as Stripe.PaymentIntent;
+    await this.updatePaymentStatus(paymentIntent.id, 'failed');
+    this.logger.log(`Payment failed: ${paymentIntent.id}`);
   }
 
-  private handlePayoutCreated(event: Stripe.Event) {
-    const payout = event.data.object;
-    return this.updatePayoutStatus(payout.id, 'completed');
+  private async handlePayoutCreated(event: Stripe.Event) {
+    const payout = event.data.object as Stripe.Payout;
+    await this.updatePayoutStatus(payout.id, 'completed');
+    this.logger.log(`Payout created: ${payout.id}`);
   }
 
-  private handlePayoutFailed(event: Stripe.Event) {
-    const payout = event.data.object;
-    return this.updatePayoutStatus(payout.id, 'failed');
+  private async handlePayoutFailed(event: Stripe.Event) {
+    const payout = event.data.object as Stripe.Payout;
+    await this.updatePayoutStatus(payout.id, 'failed');
+    this.logger.log(`Payout failed: ${payout.id}`);
   }
 
   async handleWebhook(payload: any, signature: string, rawBody: Buffer) {
@@ -484,28 +496,24 @@ export class PaymentsService {
         signature,
         process.env.STRIPE_WEBHOOK_SECRET!,
       );
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      this.logger.error(`Webhook Error: ${errorMessage}`);
-      throw new BadRequestException('Webhook Error');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      this.logger.error(`Webhook Error: ${message}`);
+      throw new BadRequestException(`Webhook Error: ${message}`);
     }
 
     switch (event.type) {
       case 'payment_intent.succeeded':
         await this.handlePaymentIntentSucceeded(event);
-        this.logger.log(`Payment succeeded: ${event.data.object.id}`);
         break;
       case 'payment_intent.payment_failed':
         await this.handlePaymentIntentFailed(event);
-        this.logger.log(`Payment failed: ${event.data.object.id}`);
         break;
       case 'payout.created':
         await this.handlePayoutCreated(event);
-        this.logger.log(`Payout created: ${event.data.object.id}`);
         break;
       case 'payout.failed':
         await this.handlePayoutFailed(event);
-        this.logger.log(`Payout failed: ${event.data.object.id}`);
         break;
       default:
         this.logger.log(`Unhandled event type ${event.type}`);
@@ -525,19 +533,17 @@ export class PaymentsService {
     }
 
     try {
-      // Від’єднати платіжний метод від Stripe
       await this.stripe.paymentMethods.detach(paymentMethod.stripePaymentMethodId);
-
-      // Видалити з бази даних
       await this.prisma.paymentMethod.delete({
         where: { id: paymentMethodId },
       });
 
       this.logger.log(`Deleted payment method ${paymentMethodId} for user ${userId}`);
       return { success: true };
-    } catch (error) {
-      this.logger.error(`Failed to delete payment method: ${error}`);
-      throw new BadRequestException(`Failed to delete payment method: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to delete payment method: ${message}`);
+      throw new BadRequestException(`Failed to delete payment method: ${message}`);
     }
   }
 }
