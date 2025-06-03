@@ -168,8 +168,8 @@ model Payment {
   paymentMethod         String
   status                String
   isPaid                Boolean  @default(false)
-  commission            String?
-  driverAmount          String?
+  commission            Float?
+  driverAmount          Float?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 }
