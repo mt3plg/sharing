@@ -62,8 +62,8 @@ model Ride {
   fare            Float?
   distance        Float?
   duration        Int?
-  paymentType     String?          @default("both") // "card", "cash", "both"
-  selectedCardId  String? // ID обраної картки водія
+  paymentType     String?          @default("both")
+  selectedCardId  String?
   selectedCard    PaymentMethod?   @relation("RideSelectedCard", fields: [selectedCardId], references: [id])
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
@@ -90,7 +90,7 @@ model Conversation {
   userId       String
   user         User      @relation("UserConversations", fields: [userId], references: [id])
   rideId       String?
-  ride         Ride?     @relation("RideConversations", fields: [rideId], references: [id])
+  ride         Ride?     @relation("RideConversations", fields: [rideId], references: [id], onDelete: Cascade)
   targetUserId String
   targetUser   User      @relation("TargetUser", fields: [targetUserId], references: [id])
   category     String
@@ -134,7 +134,7 @@ model Friend {
 model BookingRequest {
   id             String   @id @default(uuid())
   rideId         String
-  ride           Ride     @relation("RideBookingRequests", fields: [rideId], references: [id])
+  ride           Ride     @relation("RideBookingRequests", fields: [rideId], references: [id], onDelete: Cascade)
   passengerCount Int      @default(1)
   passengerId    String
   passenger      User     @relation("UserBookingRequests", fields: [passengerId], references: [id])
@@ -159,17 +159,17 @@ model FriendRequest {
 model Payment {
   id                    String   @id @default(uuid())
   rideId                String
-  ride                  Ride     @relation("RidePayments", fields: [rideId], references: [id])
+  ride                  Ride     @relation("RidePayments", fields: [rideId], references: [id], onDelete: Cascade, map: "payment_rideId_fkey")
   userId                String
   user                  User     @relation("UserPayments", fields: [userId], references: [id])
   stripePaymentIntentId String?  @unique
   amount                Float
   currency              String
-  paymentMethod         String // "cash", "google_pay", "apple_pay"
-  status                String // "pending", "succeeded", "failed", "refunded"
-  isPaid                Boolean  @default(false) // Для готівки: чи підтверджено водієм
-  commission            Float?
-  driverAmount          Float?
+  paymentMethod         String
+  status                String
+  isPaid                Boolean  @default(false)
+  commission            String?
+  driverAmount          String?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 }

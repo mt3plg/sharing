@@ -46,7 +46,7 @@ export class RidesService {
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
     private readonly paymentsService: PaymentsService,
-  ) {}
+  ) { }
 
   private async calculateDistanceAndDuration(startLocation: string, endLocation: string) {
     try {
@@ -111,7 +111,7 @@ export class RidesService {
     const lat2 = toRad(coords2.lat);
 
     const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-              Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
+      Math.sin(dLon / 2) * Math.sin(dLon / 2) * Math.cos(lat1) * Math.cos(lat2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }
@@ -572,28 +572,61 @@ export class RidesService {
     return this.prisma.$transaction(async (prisma) => {
       const ride = await prisma.ride.findUnique({
         where: { id },
+        include: {
+          payments: true,
+          bookingRequests: true,
+        },
       });
 
       if (!ride) {
+        this.logger.error(`Ride ${id} not found`);
         throw new NotFoundException('Ride not found');
       }
 
       if (ride.driverId !== userId) {
+        this.logger.error(`User ${userId} is not authorized to delete ride ${id}`);
         throw new ForbiddenException('You are not authorized to delete this ride');
       }
 
-      await prisma.bookingRequest.updateMany({
-        where: { rideId: id, status: 'pending' },
-        data: { status: 'rejected' },
-      });
+      // Перевірка на активні платежі або підтверджені бронювання
+      const hasPaidPayments = ride.payments.some(p => p.isPaid);
+      const hasAcceptedBookings = ride.bookingRequests.some(br => br.status === 'accepted' || br.status === 'confirmed');
+      if (hasPaidPayments || hasAcceptedBookings) {
+        this.logger.error(`Ride ${id} cannot be deleted due to active payments or accepted bookings`);
+        throw new BadRequestException('Cannot delete ride with active payments or accepted bookings');
+      }
 
-      await this.notifyPassengers(id, `Ride ${ride.startLocation} → ${ride.endLocation} has been cancelled`);
+      try {
+        // Видалення пов’язаних записів
+        await prisma.payment.deleteMany({
+          where: { rideId: id },
+        });
+        this.logger.log(`Deleted payments for ride ${id}`);
 
-      await prisma.ride.delete({
-        where: { id },
-      });
+        await prisma.bookingRequest.deleteMany({
+          where: { rideId: id },
+        });
+        this.logger.log(`Deleted booking requests for ride ${id}`);
 
-      return { success: true, message: 'Ride deleted successfully' };
+        await prisma.conversation.deleteMany({
+          where: { rideId: id },
+        });
+        this.logger.log(`Deleted conversations for ride ${id}`);
+
+        // Повідомлення пасажирів
+        await this.notifyPassengers(id, `Ride ${ride.startLocation} → ${ride.endLocation} has been cancelled`);
+
+        // Видалення поїздки
+        await prisma.ride.delete({
+          where: { id },
+        });
+
+        this.logger.log(`Ride ${id} successfully deleted by user ${userId}`);
+        return { success: true, message: 'Ride deleted successfully' };
+      } catch (error) {
+        this.logger.error(`Failed to delete ride ${id}: ${error}`);
+        throw new BadRequestException(`Failed to delete ride: ${error}`);
+      }
     });
   }
 }
