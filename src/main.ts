@@ -22,8 +22,13 @@ dotenv.config();
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
+  logger.log('Starting application bootstrap');
+
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  logger.log('Nest application created successfully');
+
   const httpServer = createServer(app.getHttpAdapter().getInstance());
+  logger.log('HTTP server created');
 
   // Ініціалізація WebSocket-сервера
   const io = new Server(httpServer, {
@@ -34,25 +39,27 @@ async function bootstrap() {
     pingTimeout: 60000,
     pingInterval: 25000,
   });
+  logger.log('WebSocket server initialized');
 
   // Зберігаємо io глобально для використання в ConversationsService
   global.io = io;
+  logger.log('WebSocket server instance stored globally');
 
   // Налаштування WebSocket-аутентифікації
   io.use(async (socket: Socket, next) => {
     const token = socket.handshake.auth.token;
     if (!token || !token.startsWith('Bearer ')) {
-      logger.error('WebSocket authentication failed: No token provided');
+      logger.error('WebSocket authentication failed: No token provided', socket.id);
       return next(new Error('Authentication error'));
     }
     try {
       const jwtService = app.get(JwtService);
       const payload = await jwtService.verifyAsync(token.replace('Bearer ', ''));
       socket.user = payload;
-      logger.log(`WebSocket authenticated user: ${payload.sub}`);
+      logger.log(`WebSocket authenticated user: ${payload.sub} for socket ${socket.id}`);
       next();
     } catch (err: unknown) {
-      logger.error('WebSocket authentication failed:', (err as Error).message);
+      logger.error('WebSocket authentication failed:', (err as Error).message, socket.id);
       next(new Error('Authentication error'));
     }
   });
@@ -72,7 +79,7 @@ async function bootstrap() {
     });
 
     socket.on('sendMessage', ({ conversationId, message }) => {
-      logger.log(`Received message for ${conversationId}: ${JSON.stringify(message)}`);
+      logger.log(`Received message for ${conversationId} from ${socket.id}: ${JSON.stringify(message)}`);
       // Повідомлення обробляються в ConversationsService.sendMessage
     });
 
@@ -87,6 +94,7 @@ async function bootstrap() {
     bodyParser.raw({ type: 'application/json' }),
     (req, res, next) => {
       req.rawBody = req.body;
+      logger.log(`Stripe webhook received at /payments/webhooks/stripe`);
       next();
     },
   );
@@ -99,18 +107,22 @@ async function bootstrap() {
     .addBearerAuth()
     .build();
   const document = SwaggerModule.createDocument(app, config);
+  logger.log('Swagger document created');
   SwaggerModule.setup('api', app, document);
 
   // Налаштування валідації
   app.useGlobalPipes(new ValidationPipe());
+  logger.log('Global validation pipe configured');
 
   // Налаштування статичного доступу до файлів
   app.useStaticAssets(join(__dirname, '..', 'Uploads'), {
     prefix: '/Uploads/',
   });
+  logger.log('Static assets configured for /Uploads/');
 
   // Отримуємо порт зі змінних середовища або використовуємо 3000 за замовчуванням
   const port = process.env.PORT || 3000;
+  logger.log(`Using port: ${port}`);
 
   // Запускаємо сервер
   await app.listen(port);
