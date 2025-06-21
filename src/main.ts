@@ -115,10 +115,10 @@ async function bootstrap() {
   logger.log('Global validation pipe configured');
 
   // Налаштування статичного доступу до файлів
-  app.useStaticAssets(join(__dirname, '..', 'Uploads'), {
-    prefix: '/Uploads/',
+  app.useStaticAssets(join(__dirname, '..', 'uploads'), {
+    prefix: '/uploads/',
   });
-  logger.log('Static assets configured for /Uploads/');
+  logger.log('Static assets configured for /uploads/');
 
   // Отримуємо порт зі змінних середовища або використовуємо 3000 за замовчуванням
   const port = process.env.PORT || 3000;

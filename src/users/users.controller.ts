@@ -198,7 +198,7 @@ export class UsersController {
         this.logger.error('File upload failed: filename is undefined');
         throw new BadRequestException('File upload failed: filename is undefined');
       }
-      const avatarPath = `/Uploads/avatars/${file.filename}`;
+      const avatarPath = `/uploads/avatars/${file.filename}`;
       this.logger.log(`Uploading avatar for user ID: ${userId}, path: ${avatarPath}`);
       return await this.usersService.updateAvatar(userId, avatarPath);
     } catch (error) {

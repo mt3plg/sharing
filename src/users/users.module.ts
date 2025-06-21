@@ -16,7 +16,7 @@ import { PaymentsModule } from '../payments/payments.module';
     PaymentsModule,
     MulterModule.register({
       storage: diskStorage({
-        destination: './Uploads/avatars',
+        destination: './uploads/avatars',
         filename: (req, file, cb) => {
           const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
           const ext = extname(file.originalname);
