@@ -350,24 +350,14 @@ export class RidesService {
         include: { driver: true },
       });
 
-      if (!ride) {
-        throw new NotFoundException('Ride not found');
-      }
-
-      if (ride.driverId !== userId) {
-        throw new ForbiddenException('You are not authorized to update this ride');
-      }
-
-      if (ride.status === 'completed') {
-        throw new BadRequestException('Cannot edit completed ride');
-      }
+      if (!ride) throw new NotFoundException('Ride not found');
+      if (ride.driverId !== userId) throw new ForbiddenException('You are not authorized to update this ride');
+      if (ride.status === 'completed') throw new BadRequestException('Cannot edit completed ride');
 
       const now = new Date();
       const departureTime = new Date(ride.departureTime);
       const hoursUntilDeparture = (departureTime.getTime() - now.getTime()) / (1000 * 60 * 60);
-      if (hoursUntilDeparture < 24) {
-        throw new BadRequestException('Cannot edit ride less than 24 hours before departure');
-      }
+      if (hoursUntilDeparture < 24) throw new BadRequestException('Cannot edit ride less than 24 hours before departure');
 
       let startCoords = { lat: ride.startCoordsLat, lng: ride.startCoordsLng };
       let endCoords = { lat: ride.endCoordsLat, lng: ride.endCoordsLng };
@@ -392,9 +382,7 @@ export class RidesService {
 
       if (updateRideDto.selectedCard?.id) {
         const card = await this.prisma.paymentMethod.findUnique({ where: { id: updateRideDto.selectedCard.id } });
-        if (!card || card.userId !== userId) {
-          throw new BadRequestException('Invalid or unauthorized payment method');
-        }
+        if (!card || card.userId !== userId) throw new BadRequestException('Invalid or unauthorized payment method');
       }
 
       const updatedRide = await prisma.ride.update({
@@ -428,6 +416,7 @@ export class RidesService {
     });
   }
 
+
   async bookRide(rideId: string, passengerId: string, bookRideDto: BookRideDto) {
     const { passengerCount } = bookRideDto;
 
@@ -441,29 +430,13 @@ export class RidesService {
         include: { driver: true },
       });
 
-      if (!ride) {
-        throw new NotFoundException('Ride not found');
-      }
+      if (!ride) throw new NotFoundException('Ride not found');
+      if (ride.status !== 'active') throw new BadRequestException('Ride is not available for booking');
+      if (ride.availableSeats < passengerCount) throw new BadRequestException(`Not enough available seats. Requested: ${passengerCount}, Available: ${ride.availableSeats}`);
+      if (ride.driverId === passengerId) throw new BadRequestException('Driver cannot book their own ride');
 
-      if (ride.status !== 'active') {
-        throw new BadRequestException('Ride is not available for booking');
-      }
-
-      if (ride.availableSeats < passengerCount) {
-        throw new BadRequestException(`Not enough available seats. Requested: ${passengerCount}, Available: ${ride.availableSeats}`);
-      }
-
-      if (ride.driverId === passengerId) {
-        throw new BadRequestException('Driver cannot book their own ride');
-      }
-
-      const existingRequest = await prisma.bookingRequest.findFirst({
-        where: { rideId, passengerId },
-      });
-
-      if (existingRequest) {
-        throw new BadRequestException('You have already sent a booking request for this ride');
-      }
+      const existingRequest = await prisma.bookingRequest.findFirst({ where: { rideId, passengerId } });
+      if (existingRequest) throw new BadRequestException('You have already sent a booking request for this ride');
 
       const bookingRequest = await prisma.bookingRequest.create({
         data: {
@@ -478,11 +451,14 @@ export class RidesService {
       });
 
       const newAvailableSeats = ride.availableSeats - passengerCount;
-      await prisma.ride.update({
+      const updatedRide = await prisma.ride.update({
         where: { id: rideId },
         data: {
           availableSeats: newAvailableSeats,
           status: newAvailableSeats === 0 ? 'booked' : 'active',
+        },
+        include: {
+          driver: { select: { id: true, name: true, avatar: true, rating: true } },
         },
       });
 
@@ -503,6 +479,7 @@ export class RidesService {
           status: bookingRequest.status,
           createdAt: bookingRequest.createdAt.toISOString(),
         },
+        ride: updatedRide,
       };
     });
   }
