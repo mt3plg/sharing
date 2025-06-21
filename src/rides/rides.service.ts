@@ -330,14 +330,16 @@ export class RidesService {
     const ride = await this.prisma.ride.findUnique({
       where: { id },
       include: {
-        driver: { select: { id: true, name: true, avatar: true, rating: true } },
+        driver: {
+          select: { id: true, name: true, avatar: true, rating: true },
+        },
         payments: true,
         selectedCard: { select: { id: true, brand: true, last4: true } },
       },
     });
 
-    if (!ride) {
-      throw new NotFoundException('Ride not found');
+    if (!ride || !ride.driver) {
+      throw new NotFoundException('Ride or driver not found');
     }
 
     return { success: true, ride };
