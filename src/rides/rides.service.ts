@@ -333,17 +333,16 @@ export class RidesService {
         driver: {
           select: { id: true, name: true, avatar: true, rating: true },
         },
-        payments: true,
-        selectedCard: { select: { id: true, brand: true, last4: true } },
       },
     });
-
+  
     if (!ride || !ride.driver) {
       throw new NotFoundException('Ride or driver not found');
     }
-
+  
     return { success: true, ride };
   }
+  
 
   async update(id: string, updateRideDto: Partial<CreateRideDto>, userId: string) {
     return this.prisma.$transaction(async (prisma) => {
