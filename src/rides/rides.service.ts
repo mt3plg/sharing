@@ -427,7 +427,9 @@ export class RidesService {
     return this.prisma.$transaction(async (prisma) => {
       const ride = await prisma.ride.findUnique({
         where: { id: rideId },
-        include: { driver: true },
+        include: {
+          driver: { select: { id: true, name: true, avatar: true, rating: true } },
+        },
       });
 
       if (!ride) throw new NotFoundException('Ride not found');
