@@ -415,54 +415,61 @@ export class UsersService {
       const user = await this.prisma.user.findUnique({
         where: { id: userId },
       });
-
+  
       if (!user) {
         this.logger.warn(`User with ID ${userId} not found`);
         throw new NotFoundException('User not found');
       }
-
+  
       const author = await this.prisma.user.findUnique({
         where: { id: authorId },
       });
-
+  
       if (!author) {
         this.logger.warn(`Author with ID ${authorId} not found`);
         throw new NotFoundException('Author not found');
       }
-
-      const sharedRideAsDriver = await this.prisma.ride.findFirst({
+  
+      // Перевірка через bookingRequest
+      const sharedRideAsDriver = await this.prisma.bookingRequest.findFirst({
         where: {
-          driverId: userId,
+          ride: {
+            driverId: userId,
+            status: 'completed',
+          },
           passengerId: authorId,
-          status: 'completed',
+          status: 'accepted',
         },
       });
-
-      const sharedRideAsPassenger = await this.prisma.ride.findFirst({
+  
+      const sharedRideAsPassenger = await this.prisma.bookingRequest.findFirst({
         where: {
-          driverId: authorId,
+          ride: {
+            driverId: authorId,
+            status: 'completed',
+          },
           passengerId: userId,
-          status: 'completed',
+          status: 'accepted',
         },
       });
-
+  
       if (!sharedRideAsDriver && !sharedRideAsPassenger) {
         this.logger.warn('No shared completed ride found for review');
         throw new BadRequestException('You can only leave a review for a user you have shared a completed ride with');
       }
-
+  
       const existingReview = await this.prisma.review.findFirst({
         where: {
           userId,
           authorId,
         },
       });
-
+  
       if (existingReview) {
         this.logger.warn('Review already exists for this user');
         throw new BadRequestException('You have already left a review for this user');
       }
-
+  
       const review = await this.prisma.review.create({
         data: {
           userId,
@@ -472,17 +479,17 @@ export class UsersService {
         },
         include: { author: { select: { id: true, name: true, avatar: true, rating: true } } },
       });
-
+  
       const reviews = await this.prisma.review.findMany({
         where: { userId },
       });
-
-      const newRating = reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length;
+  
+      const newRating = reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length || 0;
       await this.prisma.user.update({
         where: { id: userId },
         data: { rating: newRating },
       });
-
+  
       this.logger.log(`Review created for userId: ${userId}`);
       return {
         success: true,
@@ -507,7 +514,6 @@ export class UsersService {
       throw new InternalServerErrorException(`Failed to create review: ${error}`);
     }
   }
-
   async createFriendRequest(senderId: string, receiverId: string) {
     if (!senderId || !receiverId) {
       this.logger.error('Invalid input: senderId or receiverId missing');
